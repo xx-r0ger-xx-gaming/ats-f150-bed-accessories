@@ -1,0 +1,15 @@
+{
+  "_comment": "V1 colour-matched cab-high shell on the standard pickup. Render-only description; the exported shell itself comes from config/v1.json via build_scene.py.",
+  "name": "v1_shell",
+  "title": "Color matched camper shell",
+  "camper": {
+    "module": "v1_shell",
+    "config": "config/v1.json"
+  },
+  "truck": {
+    "type": "pickup"
+  },
+  "paint": "config/v1.json#materials.shell_paint",
+  "views": ["rear34", "side", "front34"],
+  "cameras": {}
+}

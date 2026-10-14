@@ -3,7 +3,10 @@
   Download and verify the pinned toolchain into tools/ (gitignored).
 .DESCRIPTION
   Blender 3.6.23 portable, SCS Blender Tools v2.4.1, SCS Conversion Tools 2.21, SCS Game Archive
-  Extractor 1.55. Downloads happen into tools/_dl and are sha256-checked before extraction.
+  Extractor 1.55, and the render-only HDRI (Poly Haven "Qwantani Late Afternoon" 4k, CC0; Poly Haven
+  publishes an md5, 9d3836829ff3e9a5bb52a99da302f37b, which matched our download; the sha256 below
+  was recorded by us on 2026-10-14). Downloads happen into tools/_dl and are sha256-checked before
+  extraction/copy.
   The Conversion Tools and Extractor hashes were recorded by us on 2026-10-14 (SCS publishes none),
   so they pin "the file we tested", not an SCS-signed value.
 #>
@@ -31,7 +34,11 @@ $items = @(
     @{ Name = 'SCS Game Archive Extractor 1.55'; File = 'scs_extractor_1_55.zip'
        Url = 'https://download.eurotrucksimulator2.com/scs_extractor_1_55.zip'
        Sha = '45385795fa830b975bd5c80a2076e17fa8398d8d23d679325e3b89b528b0229c'
-       Check = 'scs_extractor.exe'; Extract = $Tools }
+       Check = 'scs_extractor.exe'; Extract = $Tools },
+    @{ Name = 'HDRI Qwantani Late Afternoon 4k (Poly Haven, CC0)'; File = 'qwantani_late_afternoon_4k.hdr'
+       Url = 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/qwantani_late_afternoon_4k.hdr'
+       Sha = '756d132155561f224d4b3ed54cb7142c01129190d50a2e6be75f9baa9ff2c429'
+       Check = 'hdri/qwantani_late_afternoon_4k.hdr'; Extract = $null; Dest = 'hdri' }
 )
 
 foreach ($i in $items) {
@@ -49,7 +56,9 @@ foreach ($i in $items) {
         New-Item -ItemType Directory -Force -Path $i.Extract | Out-Null
         Expand-Archive -Path $zip -DestinationPath $i.Extract -Force
     } else {
-        Copy-Item $zip (Join-Path $Tools $i.File) -Force
+        $destDir = if ($i.Dest) { Join-Path $Tools $i.Dest } else { $Tools }
+        New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+        Copy-Item $zip (Join-Path $destDir $i.File) -Force
     }
     if (-not (Test-Path $target)) { throw "expected file missing after extract: $target" }
 }

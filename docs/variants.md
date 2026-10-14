@@ -1,0 +1,160 @@
+# Camper variants: render framework
+
+Render-only framework for showing several camper designs, each on its own stand-in truck, lit and
+staged the same way. Nothing here is exported or packaged, and a render is not evidence that a mod
+works in game. The V1 shell export pipeline (`build_scene.py` -> `export_scs.py` -> ...) is
+separate and uses the same shell geometry code (`scripts/lib/shell_v1.py`).
+
+## Quick start
+
+```bash
+B=tools/blender-3.6.23-windows-x64/blender.exe
+# fast Eevee check (~10-30 s per view on the Surface)
+$B --background --factory-startup --python-exit-code 1 --python scripts/render_variants.py -- \
+   --variant my_camper --profile surface
+# photoreal Cycles CPU (~1.5-3.5 min per 1280x720 view on the Surface i7-1185G7)
+$B --background --factory-startup --python-exit-code 1 --python scripts/render_variants.py -- \
+   --variant my_camper --profile surface-photo [--views rear34,side,front34] [--no-sheet]
+# everything (skips reference configs whose name starts with "_")
+$B ... --python scripts/render_variants.py -- --all --profile surface-photo
+```
+
+Outputs: `renders/variants/<name>_<view>.png` and `renders/variants/contact_sheet.png` (rows =
+variants, columns = rear34 / side / front34, rebuilt from every `<name>_<view>.png` present, so
+variants rendered in separate runs or by separate agents all land on one sheet). Run evidence goes
+to `logs/render_variants-<timestamp>.json` (settings, camera, sun, seconds, output sha256).
+
+Needs the HDRI: `powershell.exe -File scripts/fetch_tools.ps1` (CC0, sha256-checked, into
+`tools/hdri/`, gitignored). Rendering fails with a clear message if it is missing.
+
+## Adding a variant (two files, nothing else)
+
+1. `config/variants/<name>.json`
+2. `scripts/variants/<module>.py` (usually `<module>` = `<name>`)
+
+Parallel authors should only create/edit their own pair. Changes to shared code
+(`scripts/lib/*`, `render_variants.py`, `config/render.json`) affect every variant: coordinate them.
+
+### Config (`config/variants/<name>.json`)
+
+```json
+{
+  "name": "popup_camper",
+  "title": "Pop-top camper",
+  "camper": {"module": "popup_camper", "roof_lift": 0.9, "any": "module parameters"},
+  "truck": {"type": "pickup"},
+  "paint": "config/v1.json#materials.shell_paint",
+  "views": ["rear34", "side", "front34"],
+  "cameras": {"side": {"lens": 50, "sun_azimuth_deg": 240}}
+}
+```
+
+| key | meaning |
+| --- | --- |
+| `camper.module` | file `scripts/variants/<module>.py` (or a name registered with `@register`). Other `camper.*` keys are free-form module parameters. |
+| `truck` | proxy truck spec, see below. |
+| `paint` | body paint used for the truck AND `mats["paint"]` (colour match). Either `"file.json#dotted.key"` or an inline dict: `base_color` (linear RGBA), `metallic`, `roughness`, `clearcoat`, `clearcoat_roughness`, optional `flake` (0..1), `dirt` (road dust on the truck's lower body, default 0.65). |
+| `views` | subset of the views in `config/render.json`. |
+| `cameras.<view>` | per-variant overrides merged over `config/render.json` views (any camera key, plus `sun_azimuth_deg`). |
+
+### Truck spec (`truck`)
+
+Defaults in `scripts/lib/proxy_truck.py` `DEFAULTS`. Most useful keys:
+
+| key | default | notes |
+| --- | --- | --- |
+| `type` | `pickup` | `pickup` (5.5 ft bed, tailgate) or `cab_chassis` (no bed, exposed frame). |
+| `cab` | `crew` | `crew` (4 doors) or `regular` (2 doors; the front clip moves 0.72 m back, the cab back stays at the origin). |
+| `wheelbase` | 3.68 | pickup wheelbase. |
+| `wheelbase_cc` | 4.30 | cab_chassis wheelbase (front axle to rear axle). |
+| `frame_length_behind_cab` | 3.30 | cab_chassis: rails run from y = 0 to y = -this. |
+| `frame_top_z` | 0.62 / 0.80 | rail top above ground (pickup / cab_chassis). |
+| `frame_hw` | 0.56 | outer face of the rails (half width). |
+| `dual_rear_wheels` | false | cab_chassis only: dual rear wheels, wider rear track. |
+| `tire_diameter`, `tire_width`, `rim_diameter`, `track`, `spokes`, `wheel_finish` | 0.82, 0.275, 0.508, 1.70, 6, `alloy_dark` | 20 in split-spoke alloys on all-terrain tyres. |
+
+The truck is original, generic and debadged (no logos, ovals or lettering) and is never exported.
+Reference renders of the bare bases: `--variant _ref_pickup`, `--variant _ref_cab_chassis`.
+
+### Module (`scripts/variants/<module>.py`)
+
+```python
+TRUCK_TYPES = ("pickup",)          # optional; checked against truck.type (default: both)
+DESCRIPTION = "Pop-top camper"     # optional
+
+def build(cfg, collection, mats):
+    """Return the list of every object created (may be empty for a bare truck)."""
+```
+
+- `cfg`: the variant JSON as a dict, plus
+  - `cfg["camper"]`: your parameters;
+  - `cfg["truck_info"]`: facts about the truck in the VARIANT frame (metres):
+    `type`, `ground_z` (road height, negative), `roof_z` (cab roof top), `cab_back_y` (0.07),
+    `front_y`, `front_axle_y`, `rear_axle_y`, `wheelbase`, `body_hw`, `track`, `tire_radius`,
+    `spec` (resolved truck spec), `mount_local`;
+    pickup adds `rail_z` (0), `bed_length`, `bed_inner_hw`, `rail_outer_hw`, `tailgate_y`;
+    cab_chassis adds `frame_top_z` (0), `frame_hw`, `frame_end_y`, `rear_track` (outer tyre half width).
+- `collection`: link every object you create here (`collection.objects.link(ob)`); the runner
+  rejects objects outside it.
+- `mats`: `lib.materials.MaterialLibrary` (below).
+- Deterministic: no `random` without a fixed seed, no selection/UI state, no saving, no export,
+  do not modify or delete truck objects. Prefix object names with your variant name.
+
+### Coordinate frame
+
++Y forward (toward the cab / direction of travel), +Z up, +X to the right (passenger side), metres.
+
+- **pickup**: origin = top of the bed rails, centred left/right, at the bed's front wall (same frame
+  as the V1 shell and config/v1.json). The bed runs to y = -`bed_length`; the cab roof is at
+  `roof_z` (~0.50 above the rails); the road is at `ground_z` (~-1.44).
+- **cab_chassis**: origin = top of the frame rails, centred, 7 cm behind the cab back
+  (`cab_back_y` = 0.07). The frame runs to `frame_end_y`; the road is at `ground_z` (~-0.80).
+  A Class C body sits on the rails (z >= 0) from y = 0 rearward and may extend forward over the cab
+  (the cab roof is at `roof_z` ~1.14 above the frame).
+
+## Shared helpers (reuse, do not copy)
+
+`scripts/lib/meshkit.py` (bmesh, deterministic):
+`Part(name, mats)` (one object from many primitives, `part.finish(collection, smooth=35, weighted=True)`),
+`box`, `oriented_box`, `prism_x/prism_y/prism_z` (extrude 2D profiles), `cylinder_x/y/z`,
+`revolve_x`, `arc_band_x`, `sweep_arc_x` (fender flares), `loft` (skin cross-section rings),
+`rounded_rect`, `rounded_poly`, `build_prism`, `annulus_prism` (panel-gap grooves), `bevel`
+(keeps face materials), `solidify`, `boolean_apply(obj, cutters)` (EXACT, baked),
+`cut_openings(obj, [(ring_outside, ring_inside)], mats, collection)` (generic window cutter: hole
+or recessed pocket with a glass floor and black gasket walls), `finish_hard_surface(obj)` (auto
+smooth + weighted normals), `add_box_uv`, `new_object`.
+
+`scripts/lib/shell_v1.py`: the V1 shell builders (`build_shell`, `ShellFrame`, `window_outlines`,
+`cut_windows`, ...): a worked example of a rounded, solidified cap with real window openings.
+
+`scripts/lib/materials.py` `MaterialLibrary`: `mats["paint"]` is the colour-matched body paint
+(metallic flake + clearcoat; truck and camper share it). Other keys: `paint_dark`, `glass` (thin
+tinted pane on a single face in front of a hollow interior), `glass_light`, `glass_flush` (opaque
+dark glazing for pocket floors on solids), `glass_clear`, `interior`, `trim` (satin black textured
+plastic), `trim_gloss`, `rubber`, `tire`, `chrome`, `alloy`, `alloy_dark`, `steel`, `lamp_red`
+(lit), `lamp_red_lens` (unlit), `lamp_amber`, `lamp_clear`, `led_white`, `reflector`, `plate`,
+`underbody`, `frame`, `bed_liner`, `decal_black`, `fabric`, `wood`, `plastic_white`.
+Factories: `mats.car_paint(name, base_color, ...)` (stripes, two-tone), `mats.principled(name, ...)`,
+`mats.thin_glass(name, tint)`, `mats.add(key, material)` (so `Part` can use it by key).
+
+`scripts/lib/environment.py`: HDRI world + sun (`setup_world`), road/ground (`add_ground`),
+auto-framed cameras (`place_camera`), render profiles (`configure_render`, compositor finishing).
+
+## Render settings (`config/render.json`)
+
+- `hdri`: Poly Haven "Qwantani Late Afternoon" 4k (CC0). The HDRI sun disk is clamped
+  (`sun_clamp`) and replaced by a sun lamp along the measured HDRI sun direction carrying the
+  removed irradiance, so shadows are crisp and never doubled. `sun_azimuth_deg` rotates world + sun
+  together around the vehicle (0 = ahead, 90 = right, 180 = behind, 270 = left); views override it.
+- `ground`: two-lane road along Y (yellow dashed centre line, white edge lines, procedural asphalt
+  with aggregate, wear tracks and sealed cracks), gravel shoulder blending into dry grass on a
+  disk that fades into the HDRI horizon.
+- `profiles`: `surface` (Eevee, 32 samples, soft shadows, GTAO, SSR, bloom), `surface-photo`
+  (Cycles CPU, 192 adaptive samples, OpenImageDenoise, Filmic High Contrast, DOF, glare /
+  chromatic aberration / vignette), `gaming` (Cycles GPU 1080p, for the gaming PC).
+- `views`: `rear34`, `side`, `front34`: `azimuth_deg`, `height`, `lens`, `target_height`, `margin`
+  (auto-fit to the truck + camper bounding box), `fstop`, `sun_azimuth_deg`.
+
+Measured on the Surface Pro 8 (i7-1185G7, Cycles CPU, v1_shell, 2026-10-14): see the
+`render_variants` log records; roughly 1.5 to 3.5 minutes per view in `surface-photo`, 10 to 40 s
+in `surface`.

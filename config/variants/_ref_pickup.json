@@ -1,0 +1,9 @@
+{
+  "_comment": "Reference only (leading underscore = skipped by --all): the bare standard pickup. Origin = bed rail top at the bed front wall.",
+  "name": "_ref_pickup",
+  "title": "Pickup base",
+  "camper": {"module": "bare"},
+  "truck": {"type": "pickup"},
+  "paint": "config/v1.json#materials.shell_paint",
+  "views": ["rear34", "side", "front34"]
+}
