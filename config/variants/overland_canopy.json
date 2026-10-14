@@ -1,0 +1,17 @@
+{
+  "name": "overland_canopy",
+  "title": "Overland canopy",
+  "camper": {
+    "module": "overland_canopy",
+    "config": "config/v1.json",
+    "paint_color": [0.008, 0.008, 0.009, 1.0],
+    "rack_inset_x": 0.09,
+    "rack_front_y": -0.14,
+    "rack_rear_y": -1.60,
+    "rack_height": 0.11
+  },
+  "truck": {"type": "pickup"},
+  "paint": {"base_color": [0.30, 0.31, 0.33, 1.0], "metallic": 0.6, "roughness": 0.3, "clearcoat": 0.8, "clearcoat_roughness": 0.05, "flake": 0.3},
+  "views": ["rear34", "side", "front34"],
+  "cameras": {}
+}
