@@ -57,7 +57,7 @@ Dealer data for the 2023 F-150 (https://www.greghublerford.com/2023-ford-f-150-b
 
 - 50.6 in is stated as the wheel-well width by https://offroadtents.com/blogs/news/ford-f150-bed-sizes-complete-guide-to-truck-bed-dimensions; the dealer page does not say. Inside vs outside length and rail height are unspecified.
 - Which bed the DLC models is UNKNOWN. A Lariat is probably a SuperCrew with the 5.5 ft bed (INFERRED).
-- `config/v1.json` currently uses 1.71 m x 1.66 m rail placeholders. UNVERIFIED. 1.66 m is the outer rail-to-rail width the shell sits on (≈ 65 in max bed width), not the 1.29 m between-wheel-well figure. Replace with in-game measurements.
+- `config/v1.json` currently uses 1.70 m length x 1.95 m outer rail-to-rail width (cab height above rails 0.50 m, rail height 1.44 m). UNVERIFIED. 1.65 m (≈ 65.2 in) is the published inside box width; the outer width the shell base sits on adds the rail caps (estimated ~0.15 m per side against a 2.03 m body). `bed.inside_width_published` keeps the 1.65 m figure. Replace all of these with in-game measurements.
 
 ## Workshop packaging facts
 

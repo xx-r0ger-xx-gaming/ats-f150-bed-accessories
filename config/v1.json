@@ -17,62 +17,86 @@
     ]
   },
   "bed": {
-    "_comment": "UNVERIFIED placeholders based on a 5.5 ft (67.1 in) F-150 bed; replace from measured in-game model.",
-    "length_at_rails": 1.71,
-    "width_at_rails": 1.66,
-    "cab_height_above_rails": 0.48
+    "_comment": "UNVERIFIED placeholders for a 2023 F-150 5.5 ft bed; replace from the measured in-game model. length_at_rails = published 67.1 in box length. width_at_rails is the OUTER rail-to-rail width the shell base sits on: published inside width is ~65.2 in (1.65 m); outer adds the rail caps (estimate ~0.15 m per side, so ~1.95 m against a 2.03 m body). Set it to 1.65 to fit the shell inside the rails instead.",
+    "length_at_rails": 1.7,
+    "inside_width_published": 1.65,
+    "width_at_rails": 1.95,
+    "cab_height_above_rails": 0.5,
+    "rail_height_above_ground": 1.44
   },
   "shell": {
-    "front_rake": 0.06,
-    "rear_rake": 0.14,
-    "side_tumblehome": 0.05,
+    "_comment": "Factory-style cab-high cap. Rakes/tumblehome are top-edge offsets in metres. roof_crown is extra height at the centreline. edge_bevel rounds every outer edge (bevel_segments segments).",
+    "front_rake": 0.03,
+    "rear_rake": 0.05,
+    "side_tumblehome": 0.06,
     "roof_crown": 0.02,
-    "wall_thickness": 0.012,
-    "edge_bevel": 0.035,
-    "bevel_segments": 3,
-    "height_offset_from_cab": 0.0,
-    "rail_trim_height": 0.03,
-    "rail_trim_outset": 0.008
+    "wall_thickness": 0.02,
+    "edge_bevel": 0.075,
+    "bevel_segments": 4,
+    "roof_divisions": 6,
+    "height_offset_from_cab": 0.0
   },
   "windows": {
-    "side_inset_front": 0.12,
-    "side_inset_rear": 0.1,
-    "side_inset_top": 0.06,
-    "side_inset_bottom": 0.07,
-    "rear_hatch_frame": 0.05,
-    "glass_offset": 0.002
+    "_comment": "Openings are cut through the wall (exact boolean); glass panes sit glass_inset behind the outer skin. Side margins are measured on the flat side panel from the front/rear/bottom/top of the shell.",
+    "side_margin_front": 0.1,
+    "side_margin_rear": 0.11,
+    "side_margin_bottom": 0.06,
+    "side_margin_top": 0.088,
+    "side_split": 0.5,
+    "pillar_width": 0.06,
+    "side_corner_radius": 0.05,
+    "rear_margin_side": 0.105,
+    "rear_margin_top": 0.1,
+    "rear_margin_bottom": 0.06,
+    "rear_corner_radius": 0.07,
+    "corner_segments": 4,
+    "glass_inset": 0.012
   },
   "materials": {
     "shell_paint": {
+      "_comment": "Silver; render_preview paints the stand-in truck with this same spec (colour-matched).",
       "base_color": [
-        0.55,
-        0.08,
-        0.06,
+        0.52,
+        0.54,
+        0.56,
         1.0
       ],
-      "roughness": 0.25,
+      "metallic": 0.55,
+      "roughness": 0.32,
+      "clearcoat": 0.6,
+      "clearcoat_roughness": 0.05,
       "role": "body_paint"
     },
     "glass": {
       "base_color": [
-        0.02,
-        0.03,
-        0.04,
+        0.012,
+        0.014,
+        0.017,
         1.0
       ],
-      "roughness": 0.05,
-      "alpha": 0.85,
+      "roughness": 0.04,
+      "alpha": 0.92,
       "role": "glass"
     },
     "trim": {
       "base_color": [
-        0.02,
-        0.02,
-        0.02,
+        0.015,
+        0.015,
+        0.016,
         1.0
       ],
-      "roughness": 0.6,
+      "roughness": 0.55,
       "role": "trim"
+    },
+    "lamp": {
+      "base_color": [
+        0.55,
+        0.01,
+        0.008,
+        1.0
+      ],
+      "roughness": 0.15,
+      "role": "lamp"
     }
   },
   "render": {
@@ -99,5 +123,37 @@
     "model_path": "vehicle/truck/upgrade/f150_bed_shell",
     "model_name": "shell",
     "export_output_type": "5"
+  },
+  "hatch_hardware": {
+    "brake_light": {
+      "width": 0.3,
+      "height": 0.035,
+      "depth": 0.03,
+      "from_glass_top": 0.035
+    },
+    "handle": {
+      "width": 0.16,
+      "height": 0.035,
+      "depth": 0.035,
+      "from_glass_bottom": 0.04
+    }
+  },
+  "rail_seal": {
+    "height": 0.022,
+    "drop": 0.004,
+    "outset": 0.007,
+    "inset": 0.03
+  },
+  "preview": {
+    "_comment": "Render-only stand-in truck (original low-poly geometry, generic and debadged, never exported). Approximate published 2023 F-150 SuperCrew 5.5 ft dims; paint comes from materials.shell_paint.",
+    "overall_length": 5.89,
+    "width": 2.03,
+    "height": 1.96,
+    "wheelbase": 3.68,
+    "tire_diameter": 0.8,
+    "rim_diameter": 0.53,
+    "rear_axle_behind_bed_front": 0.74,
+    "tailgate_thickness": 0.06,
+    "rear_bumper_depth": 0.12
   }
 }

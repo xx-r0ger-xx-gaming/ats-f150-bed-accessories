@@ -8,6 +8,10 @@ Build an original camper mod for the Ford F-150 available in the intended ATS Ro
 
 Reuse the installed vehicle's drivetrain, interior, controls, and physics through supported references where possible. This is a design goal, not a verified capability. The Class C body may require different chassis dimensions, collision, camera placement, and handling; evaluate those before describing it as cosmetic only.
 
+## Concept reference
+
+User-supplied visual reference from the prior design conversation, added October 14, 2026. It is kept private at `local-reference/f150-camper-concept.png` (gitignored) because it contains third-party logos; copy it there manually on each machine. It shows a color-matched shell, overland canopy, pop-top, slide-in camper, and a small truck-based Class C camper with interior/rear views. The project targets a compact F-150-based camper. This is visual inspiration, not measured geometry, proof of game support, or a distributable game asset; it must never be included in a mod package. The overland canopy is an optional future idea, not an additional committed phase.
+
 ## Status and source
 
 A working scripted pipeline exists: build (Blender, headless) → export (SCS Blender Tools) → convert (SCS Conversion Tools) → package → deploy, run end to end with `scripts/run_pipeline.ps1`. It was verified on the Surface Pro on October 14, 2026. It has **not been tested in game**: a successful export, conversion or package is not proof the mod loads or works in ATS Road Trip. Details live in [docs/compatibility.md](docs/compatibility.md) (tested version matrix and attachment evidence), [docs/gaming-pc-setup.md](docs/gaming-pc-setup.md) (setting up the gaming PC for rendering and game validation) and [docs/test-results.md](docs/test-results.md) (render/export/conversion results and known issues).
@@ -63,3 +67,7 @@ Ignore local-reference/, extracted game assets, tool binaries, personal paths/co
 ## Asset policy
 
 Create original geometry and textures. Do not commit, upload, or redistribute proprietary SCS assets, extracted vehicle models, interiors, textures, sounds, or third-party Road Trip/F-150 assets without explicit redistribution permission. Keep permitted inspection local and private. Reference installed dependencies where supported; document required versions instead of bundling them. Archive extraction is not permission to redistribute. If supported integration requires shipping protected assets, stop that approach and record the limitation.
+
+## Disclaimer
+
+Unofficial fan-made mod. Not affiliated with, sponsored by, or endorsed by Ford Motor Company or SCS Software. Ford and F-150 are trademarks of Ford Motor Company; American Truck Simulator is a trademark of SCS Software. Names are used only to identify the vehicle this mod fits. No Ford or SCS logos, models, or game assets are included.

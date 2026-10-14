@@ -8,9 +8,9 @@
       "flavors": "",
       "texture_file": "camper_body_base.tga",
       "texture_rgb": [
-        0.55,
-        0.08,
-        0.06
+        0.75,
+        0.76,
+        0.78
       ],
       "reflection_file": "camper_reflection.tga",
       "reflection_rgb": [
@@ -45,6 +45,17 @@
         0.03,
         0.03,
         0.03
+      ]
+    },
+    "lamp": {
+      "_status": "Third brake light lens. Placeholder 'dif.spec' red until the game's lamp/light effect is checked (the 'lamp' preset needs game light masks).",
+      "preset": "dif.spec",
+      "flavors": "",
+      "texture_file": "camper_lamp_base.tga",
+      "texture_rgb": [
+        0.7,
+        0.05,
+        0.04
       ]
     }
   },

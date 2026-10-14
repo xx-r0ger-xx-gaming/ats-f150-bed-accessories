@@ -1,5 +1,13 @@
 # Claude Code entrypoint
 
+## Concept image — open this first
+
+```text
+local-reference/f150-camper-concept.png
+```
+
+The visual reference for the V1 color-matched camper shell (top-left panel: cab-high, factory-style, large side windows, rear glass hatch) and the later compact truck-based Class C camper. It is inspiration, not measured geometry, and is never packaged into the mod.
+
 Read README.md and docs/roadmap.md before implementation. The task is an ATS Road Trip Ford F-150 camper mod: V1 color-matched bed shell, followed by a pop-top/slide-in camper and then an F-150-cab-based Class C RV.
 
 ## First actions
