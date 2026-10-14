@@ -11,7 +11,7 @@
     "rack_height": 0.11
   },
   "truck": {"type": "pickup"},
-  "paint": {"base_color": [0.30, 0.31, 0.33, 1.0], "metallic": 0.6, "roughness": 0.3, "clearcoat": 0.8, "clearcoat_roughness": 0.05, "flake": 0.3},
+  "paint": "config/v1.json#materials.shell_paint",
   "views": ["rear34", "side", "front34"],
   "cameras": {}
 }

@@ -1,5 +1,5 @@
 {
-  "_comment": "Hard-sided slide-in truck camper for a half-ton 5.5 ft bed: narrow basement in the bed, wing walls above the rails, cabover over the cab roof. Render-only (original geometry). The proxy truck has no tailgate-down/removed option, so the camper overhangs the closed tailgate.",
+  "_comment": "Hard-sided slide-in truck camper for a half-ton 5.5 ft bed: narrow basement in the bed, wing walls above the rails, cabover over the cab roof. Render-only (original geometry). Tailgate removed (as when a slide-in is loaded); the basement fills the bed to the bed end.",
   "name": "slide_in",
   "title": "Slide-in camper",
   "camper": {
@@ -13,7 +13,8 @@
     "stripe": [0.055, 0.058, 0.062, 1.0]
   },
   "truck": {
-    "type": "pickup"
+    "type": "pickup",
+    "tailgate": "removed"
   },
   "paint": "config/v1.json#materials.shell_paint",
   "views": ["rear34", "side", "front34"],

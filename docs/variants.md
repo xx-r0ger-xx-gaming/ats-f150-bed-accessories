@@ -15,11 +15,22 @@ $B --background --factory-startup --python-exit-code 1 --python scripts/render_v
 # photoreal Cycles CPU (~1.5-3.5 min per 1280x720 view on the Surface i7-1185G7)
 $B --background --factory-startup --python-exit-code 1 --python scripts/render_variants.py -- \
    --variant my_camper --profile surface-photo [--views rear34,side,front34] [--no-sheet]
-# everything (skips reference configs whose name starts with "_")
+# everything (skips reference configs whose name starts with "_"), incl. every pose in "renders"
 $B ... --python scripts/render_variants.py -- --all --profile surface-photo
+# one-off pose / experiment: override config keys (value JSON-parsed, else a plain string)
+$B ... --python scripts/render_variants.py -- --variant pop_top --set camper.state=closed --suffix _closed
+$B ... -- --variant v1_shell --set truck.tailgate=down --set 'cameras.side={"sun_azimuth_deg":200}' --suffix _test --no-sheet
 ```
 
-Outputs: `renders/variants/<name>_<view>.png` and `renders/variants/contact_sheet.png` (rows =
+- `--set key.path=value` (repeatable) is applied to the variant config before anything is built
+  (`camper.*`, `truck.*`, `paint`, `cameras.*`, `views` ...). Missing intermediate keys are created.
+- `--suffix _x` names the outputs `<name>_x_<view>.png` (they appear as their own contact-sheet row).
+- If `--set` or `--suffix` is given, it replaces the config's `renders` list with that single pose.
+- `render_variants.py` only runs `main()` under `if __name__ == "__main__"` (Blender's `--python`
+  sets `__name__ == "__main__"`), so other scripts can `import render_variants` for
+  `load_variant`, `apply_sets`, `parse_sets`, `render_variant`, `build_sheet`.
+
+Outputs: `renders/variants/<name><suffix>_<view>.png` and `renders/variants/contact_sheet.png` (rows =
 variants, columns = rear34 / side / front34, rebuilt from every `<name>_<view>.png` present, so
 variants rendered in separate runs or by separate agents all land on one sheet). Run evidence goes
 to `logs/render_variants-<timestamp>.json` (settings, camera, sun, seconds, output sha256).
@@ -45,6 +56,7 @@ Parallel authors should only create/edit their own pair. Changes to shared code
   "truck": {"type": "pickup"},
   "paint": "config/v1.json#materials.shell_paint",
   "views": ["rear34", "side", "front34"],
+  "renders": [{"suffix": "", "set": {}}, {"suffix": "_closed", "set": {"camper.state": "closed"}}],
   "cameras": {"side": {"lens": 50, "sun_azimuth_deg": 240}}
 }
 ```
@@ -53,8 +65,9 @@ Parallel authors should only create/edit their own pair. Changes to shared code
 | --- | --- |
 | `camper.module` | file `scripts/variants/<module>.py` (or a name registered with `@register`). Other `camper.*` keys are free-form module parameters. |
 | `truck` | proxy truck spec, see below. |
-| `paint` | body paint used for the truck AND `mats["paint"]` (colour match). Either `"file.json#dotted.key"` or an inline dict: `base_color` (linear RGBA), `metallic`, `roughness`, `clearcoat`, `clearcoat_roughness`, optional `flake` (0..1), `dirt` (road dust on the truck's lower body, default 0.65). |
+| `paint` | body paint used for the truck AND `mats["paint"]` (colour match). Use the shared `"config/v1.json#materials.shell_paint"` ("Iconic Silver"-like metallic silver, the single source for every variant) unless a variant deliberately needs another colour. Either `"file.json#dotted.key"` or an inline dict: `base_color` (linear RGBA), `metallic`, `roughness`, `clearcoat`, `clearcoat_roughness`, optional `flake` (0..1), `dirt` (road dust on the truck's lower body, default 0.65). |
 | `views` | subset of the views in `config/render.json`. |
+| `renders` | optional pose list; each `{"suffix", "set"}` entry is rendered (by `--variant` and `--all`) with its dotted-key overrides to `<name><suffix>_<view>.png`. Default: one pose, no suffix. `pop_top` uses it for `pop_top_closed`. |
 | `cameras.<view>` | per-variant overrides merged over `config/render.json` views (any camera key, plus `sun_azimuth_deg`). |
 
 ### Truck spec (`truck`)
@@ -64,6 +77,7 @@ Defaults in `scripts/lib/proxy_truck.py` `DEFAULTS`. Most useful keys:
 | key | default | notes |
 | --- | --- | --- |
 | `type` | `pickup` | `pickup` (5.5 ft bed, tailgate) or `cab_chassis` (no bed, exposed frame). |
+| `tailgate` | `closed` | pickup only: `closed` (default, geometry unchanged), `down` (open, level with the bed floor, support cables), `removed` (opening down to the bed floor, as when a slide-in is loaded; `slide_in` uses it). Reported as `truck_info["tailgate"]`. |
 | `cab` | `crew` | `crew` (4 doors) or `regular` (2 doors; the front clip moves 0.72 m back, the cab back stays at the origin). |
 | `wheelbase` | 3.68 | pickup wheelbase. |
 | `wheelbase_cc` | 4.30 | cab_chassis wheelbase (front axle to rear axle). |
@@ -92,7 +106,7 @@ def build(cfg, collection, mats):
     `type`, `ground_z` (road height, negative), `roof_z` (cab roof top), `cab_back_y` (0.07),
     `front_y`, `front_axle_y`, `rear_axle_y`, `wheelbase`, `body_hw`, `track`, `tire_radius`,
     `spec` (resolved truck spec), `mount_local`;
-    pickup adds `rail_z` (0), `bed_length`, `bed_inner_hw`, `rail_outer_hw`, `tailgate_y`;
+    pickup adds `rail_z` (0), `bed_length`, `bed_inner_hw`, `rail_outer_hw`, `tailgate_y` (bed end), `tailgate`;
     cab_chassis adds `frame_top_z` (0), `frame_hw`, `frame_end_y`, `rear_track` (outer tyre half width).
 - `collection`: link every object you create here (`collection.objects.link(ob)`); the runner
   rejects objects outside it.
@@ -153,8 +167,12 @@ auto-framed cameras (`place_camera`), render profiles (`configure_render`, compo
   (Cycles CPU, 192 adaptive samples, OpenImageDenoise, Filmic High Contrast, DOF, glare /
   chromatic aberration / vignette), `gaming` (Cycles GPU 1080p, for the gaming PC).
 - `views`: `rear34`, `side`, `front34`: `azimuth_deg`, `height`, `lens`, `target_height`, `margin`
-  (auto-fit to the truck + camper bounding box), `fstop`, `sun_azimuth_deg`.
+  (auto-fit to the truck + camper bounding box), `fstop`, `sun_azimuth_deg`. The side camera sits
+  9 deg forward of square (279) with the sun low behind-left (205) so the flank is raking-lit; a sun
+  behind the camera made paint, dark glass and graphics read washed-out mid-grey.
+- `class_c` puts the entry door + awning on the passenger/curb side (`camper.door_side: 1`) and
+  mirrors its `front34` camera to the right-front so the hero view shows the door side.
 
-Measured on the Surface Pro 8 (i7-1185G7, Cycles CPU, v1_shell, 2026-10-14): see the
-`render_variants` log records; roughly 1.5 to 3.5 minutes per view in `surface-photo`, 10 to 40 s
-in `surface`.
+Measured on the Surface Pro 8 (i7-1185G7, 2026-10-14, `--all`, 6 poses x 3 views, one Blender):
+`surface-photo` 116 to 156 s per 1280x720 view, 2394 s (~40 min) for all 18; `surface` (Eevee)
+10 to 13 s per view, ~3.7 min for all 18. Per-view seconds are in the `render_variants` log records.

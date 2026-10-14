@@ -54,17 +54,19 @@
   },
   "materials": {
     "shell_paint": {
-      "_comment": "Silver; render_preview paints the stand-in truck with this same spec (colour-matched).",
+      "_comment": "THE shared render body paint: 'Iconic Silver'-like mid-light metallic silver (approximation, not a factory colour code). Used by render_preview and, via \"paint\": \"config/v1.json#materials.shell_paint\", by every variant's truck + colour-matched camper. Render-only keys (flake, dirt) are ignored by build_scene; the exported SCS material takes its colour from the game's truck paint (eut2.truckpaint), not from base_color.",
       "base_color": [
-        0.52,
-        0.54,
-        0.56,
+        0.40,
+        0.41,
+        0.42,
         1.0
       ],
-      "metallic": 0.55,
-      "roughness": 0.32,
-      "clearcoat": 0.6,
-      "clearcoat_roughness": 0.05,
+      "metallic": 0.9,
+      "roughness": 0.36,
+      "clearcoat": 1.0,
+      "clearcoat_roughness": 0.03,
+      "flake": 0.45,
+      "dirt": 0.35,
       "role": "body_paint"
     },
     "glass": {

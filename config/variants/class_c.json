@@ -9,7 +9,7 @@
     "skirt_z": -0.30,
     "roof_z": 2.48,
     "cabover_bottom_z": 1.22,
-    "door_side": -1,
+    "door_side": 1,
     "bikes": 2
   },
   "truck": {
@@ -19,7 +19,8 @@
     "frame_length_behind_cab": 3.6,
     "dual_rear_wheels": true
   },
-  "paint": {"base_color": [0.33, 0.345, 0.36, 1.0], "metallic": 0.8, "roughness": 0.28, "clearcoat": 1.0, "clearcoat_roughness": 0.04, "flake": 0.35, "dirt": 0.35},
+  "paint": "config/v1.json#materials.shell_paint",
   "views": ["rear34", "side", "front34"],
-  "cameras": {}
+  "_cameras_comment": "door_side 1 = entry door + awning on the passenger/curb side (US). front34 is mirrored to the right-front so the hero view shows the door side; side and rear34 stay on the left (graphics, bike rack).",
+  "cameras": {"front34": {"azimuth_deg": 40, "sun_azimuth_deg": 70, "height": 1.6, "target_height": 1.5, "margin": 0.05}}
 }

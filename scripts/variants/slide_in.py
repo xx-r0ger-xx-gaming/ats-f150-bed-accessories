@@ -3,11 +3,11 @@
 Layout (variant frame, origin = bed rail top at the bed front wall, +Y forward):
   - basement: narrow box inside the bed (below the rails), mostly hidden by the bed sides;
   - main body: full-width "wing walls" from just above the rails to the roof, rear overhang past
-    the (closed) tailgate, cabover sleeping section over the cab roof with a chamfered/rounded nose;
+    the bed end, cabover sleeping section over the cab roof with a chamfered/rounded nose;
   - framed RV windows (recessed dark glazing), rear entry door with window, rear ladder, roof AC +
     vents, side storage hatch, fridge vents, tail/marker/clearance lamps, stowed corner jacks,
     subtle dark-grey graphic swooshes.
-The proxy truck has no tailgate-removed option, so the camper simply overhangs the closed tailgate.
+With truck.tailgate "closed" the camper simply overhangs the closed tailgate.
 """
 import math
 
@@ -203,11 +203,22 @@ def build_body(g, mats, col):
     boolean_apply(body, cutter)
     finish_hard_surface(body, 35)
 
-    # basement inside the bed (mostly hidden by the bed sides / tailgate)
+    # basement inside the bed. Tailgate closed: a dark box hidden by the bed sides / tailgate.
+    # Tailgate down/removed: it fills the bed to the bed end like a real unit (gelcoat, a rubber
+    # bumper strip at the floor and a dark rear trim band), visible under the rear overhang.
     bp = Part(f"{NAME}_basement", mats)
     ti = g.ti
     bhw = min(ti["bed_inner_hw"] - 0.04, 0.80)
-    box(bp, (-bhw, ti["tailgate_y"] + 0.07, -0.50), (bhw, yb - 0.02, z0 + 0.02), "underbody", bev=0.02)
+    if ti.get("tailgate", "closed") == "closed":
+        box(bp, (-bhw, ti["tailgate_y"] + 0.07, -0.50), (bhw, yb - 0.02, z0 + 0.02), "underbody", bev=0.02)
+    else:
+        ye = ti["tailgate_y"] - 0.02
+        box(bp, (-bhw, ye, -0.50), (bhw, yb - 0.02, z0 + 0.02), "sl_gel", bev=0.02)
+        box(bp, (-bhw + 0.01, ye - 0.035, -0.505), (bhw - 0.01, ye + 0.02, -0.44), "rubber", bev=0.008)
+        box(bp, (-bhw + 0.01, ye - 0.006, -0.20), (bhw - 0.01, ye + 0.01, -0.17), "sl_stripe")
+        for sgn in (-1, 1):              # basement tail/marker lamps low on the rear face
+            a_, b_ = sorted((sgn * (bhw - 0.06), sgn * (bhw - 0.16)))
+            box(bp, (a_, ye - 0.012, -0.36), (b_, ye + 0.01, -0.30), "lamp_red_lens", bev=0.006)
     return [body, bp.finish(col, smooth=35)]
 
 

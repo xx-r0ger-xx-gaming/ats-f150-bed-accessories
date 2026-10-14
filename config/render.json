@@ -73,7 +73,8 @@
   "views": {
     "_comment": "Auto-framed cameras (lib/environment.place_camera): azimuth_deg 0 = in front, 90 = right, 180 = behind, 270 = left; height/target_height in m above ground; margin = empty border fraction; fstop used only when the profile has dof.",
     "rear34": {"azimuth_deg": 222, "height": 1.45, "lens": 45, "target_height": 1.05, "margin": 0.07, "fstop": 5.6, "sun_azimuth_deg": 248},
-    "side": {"azimuth_deg": 270, "height": 1.25, "lens": 60, "target_height": 1.0, "margin": 0.06, "fstop": 8.0, "sun_azimuth_deg": 252},
+    "_side_comment": "Side: camera 9 deg forward of square (a sliver of the shaded nose shows) with the sun low behind-left (205) raking along the flank; a sun behind the camera (old 252) flattened the paint and turned dark glass/graphics mid-grey.",
+    "side": {"azimuth_deg": 279, "height": 1.25, "lens": 60, "target_height": 1.0, "margin": 0.06, "fstop": 8.0, "sun_azimuth_deg": 205},
     "front34": {"azimuth_deg": 318, "height": 1.35, "lens": 45, "target_height": 1.0, "margin": 0.07, "fstop": 5.6, "sun_azimuth_deg": 292}
   }
 }

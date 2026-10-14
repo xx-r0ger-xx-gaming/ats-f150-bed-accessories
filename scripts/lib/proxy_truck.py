@@ -5,7 +5,8 @@ manufacturer model: only approximate published overall proportions of a full-siz
 pickup. No logos, ovals, lettering or badges anywhere.
 
 Two body types (spec["type"]):
-  pickup       - 4-door crew cab, 5.5 ft bed with tailgate, wheelbase ~3.68 m
+  pickup       - 4-door crew cab, 5.5 ft bed with tailgate (spec["tailgate"]: closed | down |
+                 removed), wheelbase ~3.68 m
   cab_chassis  - same cab/front end, no bed, longer wheelbase (default 4.3 m), exposed frame rails
                  behind the cab, optional dual rear wheels (spec["dual_rear_wheels"]) - the base for
                  a Class C motorhome body.
@@ -59,6 +60,7 @@ DEFAULTS = {
     "frame_hw": 0.56,                 # outer face of the frame rails
     "frame_length_behind_cab": 3.30,  # cab_chassis: rails run from y = 0 to y = -this
     "dual_rear_wheels": False,
+    "tailgate": "closed",             # pickup: closed | down (open, level with the bed floor) | removed
 }
 
 
@@ -70,7 +72,7 @@ class TruckInfo(dict):
 
     type, mount_local (mount in truck-local coords), ground_z, roof_z, cab_back_y, front_y,
     front_axle_y, rear_axle_y, wheelbase, body_hw, track, tire_radius,
-    pickup:      rail_z (=0), bed_length, bed_inner_hw, rail_outer_hw, tailgate_y
+    pickup:      rail_z (=0), bed_length, bed_inner_hw, rail_outer_hw, tailgate_y (bed end), tailgate
     cab_chassis: frame_top_z (=0), frame_hw, frame_end_y, rear_track (outer tyre edge half width)
     objects: list of truck objects (not serialised).
     """
@@ -85,6 +87,8 @@ def make_spec(overrides=None):
         s["frame_top_z"] = 0.62 if s["type"] == "pickup" else 0.80
     if s["type"] == "cab_chassis":
         s["wheelbase"] = s.get("wheelbase_cc") or s["cab_chassis_wheelbase"]
+    if s["tailgate"] not in ("closed", "down", "removed"):
+        raise ValueError(f"truck tailgate must be closed|down|removed, got {s['tailgate']}")
     if s["cab"] not in ("crew", "regular"):
         raise ValueError(f"truck cab must be crew|regular, got {s['cab']}")
     if s["cab"] == "regular":           # shorter cab: the front clip slides back, cab back stays put
@@ -288,11 +292,17 @@ def build_bed(g, mats, col):
     gp = Part("pv_tg_cut", mats)
     gap = 0.0045
     tg_hw = W - 0.17
-    for sgn in (-1, 1):
-        xa, xb = sorted((sgn * (tg_hw - gap / 2), sgn * (tg_hw + gap / 2)))
-        box(gp, (xa, y0 - 0.1, zb + 0.06), (xb, y0 + 0.03, zt + 0.1), "trim")
-    box(gp, (-tg_hw, y0 - 0.1, zb + 0.06 - gap / 2), (tg_hw, y0 + 0.03, zb + 0.06 + gap / 2), "trim")
-    box(gp, (-tg_hw, y0 + 0.03 - gap / 2, zb + 0.06), (tg_hw, y0 + 0.03 + gap / 2, zt + 0.1), "trim")
+    if s["tailgate"] == "closed":
+        for sgn in (-1, 1):
+            xa, xb = sorted((sgn * (tg_hw - gap / 2), sgn * (tg_hw + gap / 2)))
+            box(gp, (xa, y0 - 0.1, zb + 0.06), (xb, y0 + 0.03, zt + 0.1), "trim")
+        box(gp, (-tg_hw, y0 - 0.1, zb + 0.06 - gap / 2), (tg_hw, y0 + 0.03, zb + 0.06 + gap / 2), "trim")
+        box(gp, (-tg_hw, y0 + 0.03 - gap / 2, zb + 0.06), (tg_hw, y0 + 0.03 + gap / 2, zt + 0.1), "trim")
+    else:
+        # tailgate opening: the gate panel is gone down to the bed floor; below it a short rear sill
+        # (bed-floor end) stays, with the gate's lower shut line across it
+        box(gp, (-tg_hw, y0 - 0.1, zb + 0.24), (tg_hw, y0 + 0.06, zt + 0.1), "bed_liner")
+        box(gp, (-tg_hw, y0 - 0.1, zb + 0.06 - gap / 2), (tg_hw, y0 + 0.012, zb + 0.06 + gap / 2), "trim")
     gp_ob = bm_object("pv_tg_cut", gp.bm, [mats[k] for k in gp.slots], col)
     # fuel door (left side): ring-shaped groove cutter
     outline = rounded_rect(-0.62, -0.42, 1.05, 1.24, 0.03, 3)
@@ -304,7 +314,36 @@ def build_bed(g, mats, col):
     fd_ob = bm_object("pv_fuel_cut", fd.bm, [mats[k] for k in fd.slots], col)
     boolean_apply(bed, [tub_ob, gp_ob, fd_ob, arch_cutter(g, mats, col, g.y_ra, inner - 0.02)])
     finish_hard_surface(bed, 35)
-    return [bed]
+    objs = [bed]
+    if s["tailgate"] == "down":
+        objs.append(build_tailgate_down(g, mats, col, tg_hw))
+    return objs
+
+
+def build_tailgate_down(g, mats, col, tg_hw):
+    """Open tailgate: hinged at the bed floor, lying level and rearward; liner up, paint outside,
+    support cables to the bed pillars, handle on the (now lower) panel face."""
+    s = g.s
+    y0, zb, zt = g.bed_rear, s["bed_bottom_z"], s["rail_z"]
+    ztop = zb + 0.24                     # flush with the bed floor
+    th = 0.055
+    length = zt - (zb + 0.06) - 0.01     # gate height when closed
+    hw = tg_hw - 0.006
+    p = Part("pv_tailgate", mats)
+    box(p, (-hw, y0 - length, ztop - th), (hw, y0 + 0.002, ztop - 0.004), "paint", bev=0.012, seg=2)
+    box(p, (-hw + 0.03, y0 - length + 0.03, ztop - 0.006), (hw - 0.03, y0 - 0.01, ztop), "bed_liner")
+    box(p, (-0.13, y0 - length + 0.07, ztop - th - 0.012), (0.13, y0 - length + 0.115, ztop - th + 0.004),
+        "trim", bev=0.006, seg=2)        # handle, now on the underside near the free edge
+    for sgn in (-1, 1):                  # hinge barrels + support cables
+        cylinder_x(p, y0 - 0.005, ztop - th / 2, 0.016, *sorted((sgn * (hw - 0.10), sgn * (hw - 0.02))),
+                   "frame", seg=10)
+        a = Vector((sgn * (hw - 0.01), y0 - length + 0.06, ztop - 0.01))
+        b = Vector((sgn * (hw + 0.035), y0 + 0.03, zt - 0.10))
+        ax = (b - a).normalized()
+        side = ax.cross(Vector((0, 0, 1))).normalized()
+        up = side.cross(ax).normalized()
+        oriented_box(p, (a + b) / 2, (ax, side, up), ((b - a).length, 0.007, 0.007), "steel")
+    return p.finish(col, smooth=40, weighted=True)
 
 
 def plan_ring(hw, yb, yf, rb, rf, seg=4):
@@ -678,8 +717,9 @@ def build_rear(g, mats, col):
         box(p, (ac, y0 - 0.016, 1.0), (bc, y0 - 0.008, 1.37), "lamp_red")
         ar, br = sorted((sgn * (xo - 0.10), sgn * (xo - 0.035)))
         box(p, (ar, y0 - 0.017, 1.15), (br, y0 - 0.008, 1.22), "lamp_clear", bev=0.004)
-    box(p, (-0.13, y0 - 0.02, zt - 0.115), (0.13, y0 + 0.01, zt - 0.07), "trim", bev=0.01, seg=2)   # handle
-    box(p, (-0.025, y0 - 0.024, zt - 0.10), (0.025, y0 - 0.015, zt - 0.08), "trim_gloss")             # camera
+    if s["tailgate"] == "closed":
+        box(p, (-0.13, y0 - 0.02, zt - 0.115), (0.13, y0 + 0.01, zt - 0.07), "trim", bev=0.01, seg=2)  # handle
+        box(p, (-0.025, y0 - 0.024, zt - 0.10), (0.025, y0 - 0.015, zt - 0.08), "trim_gloss")            # camera
     # bumper
     yb0, yb1 = y0 - 0.20, y0 + 0.03
     prof = [(yb0, 0.47), (yb0 - 0.015, 0.55), (yb0, 0.70), (yb1, 0.72), (yb1, 0.47)]
@@ -894,7 +934,7 @@ def build_truck(spec, mats, collection=None):
     if g.pickup:
         info.update(rail_z=0.0, bed_length=s["bed_length"], bed_inner_hw=g.W - 0.15,
                     rail_outer_hw=surface_x(g.W, s["bed_bottom_z"], s["rail_z"], s["rail_z"] - 0.03, **g.bed_kw),
-                    tailgate_y=g.bed_rear)
+                    tailgate_y=g.bed_rear, tailgate=s["tailgate"])
     else:
         dual = s["dual_rear_wheels"]
         info.update(frame_top_z=0.0, frame_hw=s["frame_hw"], frame_end_y=-s["frame_length_behind_cab"],

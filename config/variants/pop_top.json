@@ -19,7 +19,11 @@
   "truck": {
     "type": "pickup"
   },
-  "paint": {"base_color": [0.36, 0.37, 0.38, 1.0], "metallic": 0.65, "roughness": 0.3, "clearcoat": 0.8, "clearcoat_roughness": 0.05, "flake": 0.3},
+  "paint": "config/v1.json#materials.shell_paint",
   "views": ["rear34", "side", "front34"],
+  "renders": [
+    {"suffix": "", "set": {}},
+    {"suffix": "_closed", "set": {"camper.state": "closed"}}
+  ],
   "cameras": {}
 }
