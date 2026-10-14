@@ -40,15 +40,15 @@ Record each answer in `docs/compatibility.md` with the file it came from.
 
 | Need | Where to look in `local-reference/roadtrip` |
 |---|---|
-| F-150 unit / def path | `def/vehicle/truck/*` (find the F-150 folder and its `.sii`) -> replaces `TODO_F150_UNIT` and `TODO_F150_UNIT_NAME` |
-| Accessory slot types and locators | the truck's `accessory/` subfolders, and the model `.pmd`/`.pit` locators for the bed (replace `TODO_SLOT`) |
+| F-150 unit / def path | Confirm `def/vehicle/car/ford.f150_23/` (a car, not a truck; OBSERVED-IN-MODS 2026-10-14). Cabin def `cabin/pickup_4doors_55.sii` (unit `pckup4d_55.ford.f150_23.cabin`); dealer def `def/vehicle/car_dealer/ford/ford_f150_23.sii`. Use these for `suitable_for` and the `TODO_UNIT_NAME` / `TODO_F150_UNIT_NAME` placeholders |
+| Accessory slot types and locators | `accessory/` subfolders under `def/vehicle/car/ford.f150_23/`. Vanilla has no bed slot, so a new slot may need declaring (see `docs/compatibility.md`); model `.pmd`/`.pit` locators for the bed (replace `TODO_SLOT`) |
 | How stock paintable addons take body color | open a stock painted accessory `.sii` and its model's `.mat` files; note the material effect and paint/look tokens. Adjust `config/scs_materials.json` to match; do not hardcode a guess |
 | DLC package name for `dlc_dependencies` | the `dlc_*.scs` file name in the install dir (UNVERIFIED pattern `dlc_<name>`); replace `TODO_ROADTRIP_DLC_ID` in `src/mod/manifest.sii` |
 | Bed dimensions | inspect the stock bed model (extractor output) only for measurement, or measure in game with a known-size reference. Update `config/v1.json` `bed.*`. Do not import or copy the stock mesh into the project |
 
 ## 5. Fill the templates
 
-1. Rename `src/mod/def/vehicle/truck/TODO_F150_UNIT/accessory/TODO_SLOT/` to the real paths.
+1. Rename `src/mod/def/vehicle/car/ford.f150_23/accessory/TODO_SLOT/` to the real slot (an existing slot or a newly declared one).
 2. Edit `f150_camper_shell.sii`: unit type/name, `suitable_for`, `icon`, `look`, `variant`, price, etc. (attribute meanings: modding.scssoft.com `accessory_data` and `accessory_addon_data`).
 3. Edit `src/mod/manifest.sii`: replace the DLC id.
 4. `python scripts\package.py` will refuse to run until no `TODO` markers remain; `--allow-todo` is for dry runs only.

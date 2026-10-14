@@ -1,13 +1,16 @@
 SiiNunit
 {
 # TEMPLATE. Fill every TODO from the Road Trip DLC defs extracted into local-reference/ on the
-# gaming PC (see docs/gaming-pc-setup.md). The TODO_* directory names above must also be renamed
-# to the real vehicle unit and accessory slot paths; package.py refuses to package until no TODO
-# remains. Attribute list: modding.scssoft.com/wiki/Documentation/Engine/Units/accessory_data and
+# gaming PC (see docs/gaming-pc-setup.md). The directory is def/vehicle/car/ford.f150_23/ (car, not
+# truck; observed in community mod defs 2026-10-14, OBSERVED-IN-MODS). TODO_SLOT must be renamed to
+# either an existing accessory slot or a NEW slot type declared by this mod (Pickup Load Pack
+# precedent: it adds a load_bed slot; no vanilla bed/cargo slot was seen). package.py refuses to
+# package until no TODO remains. Attribute list: modding.scssoft.com/wiki/Documentation/Engine/Units/accessory_data and
 # .../accessory_addon_data (checked 2026-10-14).
 
 # UNVERIFIED: the unit type and unit-name pattern for a bed accessory in this DLC. Copy from a stock
 # addon in the extracted defs; accessory_addon_data is only the documented generic add-on type.
+# Unit names follow <id>.ford.f150_23.<type>; the cabin unit is pckup4d_55.ford.f150_23.cabin.
 accessory_addon_data : TODO_UNIT_NAME.f150_camper_shell
 {
 	name: "F-150 Camper Shell"
@@ -15,11 +18,13 @@ accessory_addon_data : TODO_UNIT_NAME.f150_camper_shell
 	unlock: 0                                   # TODO: minimum player level
 	part_type: aftermarket                      # documented values: factory aftermarket licensed unknown
 	icon: "TODO_ICON_PATH"                      # relative to /material/ui/accessory/, no extension
-	suitable_for[]: "TODO_F150_UNIT_NAME"       # TODO: unit name/wildcard of the F-150 chassis or bed
+	# INFERRED: target the cabin unit pckup4d_55.ford.f150_23.cabin (it owns the paint_job, which is the
+	# only documented body-colour hook seen). Whether addons target cabin or chassis is TODO: confirm in game.
+	suitable_for[]: "pckup4d_55.ford.f150_23.cabin"   # TODO: confirm cabin vs chassis (4doors_55_awd) target
 	# conflict_with[]: "TODO"                   # TODO: stock bed covers/caps that cannot coexist
 	# overrides[]: "TODO"                       # only if replacing a stock accessory
 
-	exterior_model: "/vehicle/truck/upgrade/f150_bed_shell/shell.pmd"
+	exterior_model: "/vehicle/car/upgrade/f150_bed_shell/shell.pmd"
 	# interior_model: ""                        # not needed for V1 exterior shell
 	# coll: ""                                  # TODO: collision (.pmc) if the shell needs one
 	look: "default"                             # TODO: must be a look present in ALL models

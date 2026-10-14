@@ -120,7 +120,7 @@
   },
   "scs": {
     "_comment": "UNVERIFIED placeholders. model_path is relative to the SCS project base (the --output dir); real game def path/accessory name must come from the vehicle defs on the gaming PC.",
-    "model_path": "vehicle/truck/upgrade/f150_bed_shell",
+    "model_path": "vehicle/car/upgrade/f150_bed_shell",
     "model_name": "shell",
     "export_output_type": "5"
   },

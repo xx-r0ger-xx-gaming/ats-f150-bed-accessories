@@ -29,16 +29,38 @@ Recorded October 14, 2026 from web research only. Nothing here has been tested i
 ## Accessory and attachment evidence
 
 - **Accessory unit syntax, VERIFIED-DOCS:** `accessory_data` carries name, icon, price (0 hides it), unlock, part_type, suitable_for, conflict_with, defaults, overrides, require (https://modding.scssoft.com/wiki/Documentation/Engine/Units/accessory_data). `accessory_addon_data` adds exterior_model/interior_model (.pmd), coll (.pmc), look, variant, hide_in; located at `def/vehicle/truck/<brand.model>/accessory/<type>/*.sii` (https://modding.scssoft.com/wiki/Documentation/Engine/Units/accessory_addon_data).
-- **F-150 def path, INFERRED:** same layout as trucks, probably a `ford.f150`-style folder. Not confirmed anywhere.
+- **F-150 def path:** superseded by the OBSERVED-IN-MODS section below (car layout, `def/vehicle/car/ford.f150_23/`). Still not confirmed against the DLC archive.
 - **Mods can add accessory types to the F-150, INFERRED:** the Pickup Load Pack adds a `load_bed` accessory positioning cargo in the bed, and invites other pickups to do the same (https://steamcommunity.com/sharedfiles/filedetails/?id=3811097362). Its file structure is not published; user comments report interior breakage and an "Index outside array boundaries: 36 >= 36" crash (unverified).
 - **Other F-150 mods:** Expanded Factory Options edits vanilla chassis/engine files and warns of load-order conflicts (https://atsmods.lt/ford-f-150-bronco-expanded-factory-options/); Skinpack is paint jobs only (https://atsmods.lt/ford-f-150-skinpack/). Prefer new files over overriding vanilla ones.
 - **Locator naming, UNKNOWN:** no wiki page fetched. Leads: https://forum.scssoft.com/viewtopic.php?t=320864 and https://forum.scssoft.com/viewforum.php?f=172.
 - **Official Road Trip / car modding docs or templates:** none found (https://modding.scssoft.com/wiki/Main_Page). UNKNOWN.
 - **Bed-cover or shell slot on the F-150:** UNKNOWN.
 
+## Observed in community mod defs (2026-10-14)
+
+Status: OBSERVED-IN-MODS. Read from the text definitions of two community mods for the Road Trip F-150 ("Ford F-150 & Bronco Expanded Factory Options" and "Ford F-150 Skinpack", atsmods.lt). Facts only; no file contents copied. Not verified in game, and the mods' files were not checked against the DLC archive.
+
+- **Vehicle type is a car, not a truck:** def root `def/vehicle/car/ford.f150_23/` with subfolders `chassis`, `engine`, `transmission`, `cabin`, `interior`, `paint_job`, `head_light`, `accessory/<slot>`, plus `data.sii` and `lamp_setup.sii`.
+- **Unit naming:** `<id>.ford.f150_23.<type>`.
+- **Chassis:** only 4-door, 5.5 ft bed, AWD is present: unit `4d55_awd.ford.f150_23.chassis` (chassis file `4doors_55_awd.sii`).
+- **Cabin:** unit `pckup4d_55.ford.f150_23.cabin` (cabin file `pickup_4doors_55.sii`).
+- **Interior:** Lariat.
+- **Dealer def:** `def/vehicle/car_dealer/ford/ford_f150_23.sii`. Lists `vehicle : .car` with `vehicle_accessory`, `vehicle_addon_accessory` and `vehicle_wheel_accessory` units, each with `data_path`, `slot_name`, `slot_hookup`.
+- **Existing accessory slots seen:** steering_w, mirror, rv_mirror, codrv_seat, doorhndl, doorstep, exhaust, f_bumper, r_bumper, f_light, r_light, hood, grill, s_vent, trunk, windowtrim, f_logo, r_logo, windows, bullbar. **No bed, load_bed or cargo slot** in vanilla as seen; `trunk` (variant `standard_paint`) is the nearest.
+- **Variant convention:** `standard_paint` suggests a body-paint variant convention for accessories (INFERRED).
+- **Models:** model root `/vehicle/car/ford_f150_23/` (e.g. `chassis/chs_4doors_55_awd.pmd`). Car upgrades live under `/vehicle/car/upgrade/`.
+- **Paint:** car `paint_job` system at `def/vehicle/car/ford.f150_23/paint_job/`. Uses `accessory_paint_job_data` with `paint_job_mask`, `base_color`, `mask_r/g/b_color`, `suitable_for` pointing at the cabin unit. Stock colours are `color<N>.sii`. No truckpaint evidence either way.
+- **DLC identifier:** none visible; neither manifest has `dlc_dependencies`.
+- **Still unknown:** cabin def contents, locator names, accessory def format for addons on this car, cab/bed model files.
+
+Consequences for this project:
+- Template moved to `src/mod/def/vehicle/car/ford.f150_23/accessory/TODO_SLOT/`; `suitable_for` set to the cabin unit (INFERRED; cabin vs chassis is open).
+- `config/v1.json` `scs.model_path` = `vehicle/car/upgrade/f150_bed_shell`.
+- No vanilla bed slot, so the shell likely needs a new slot type declared by this mod (Pickup Load Pack precedent), which means editing or overriding the dealer or cabin def. **Conflict risk:** another mod that edits the same cabin/dealer defs or declares the same slot name will collide; test with other F-150 mods disabled.
+
 ## Paint mechanism
 
-Status: UNKNOWN for non-paint-job accessories.
+Status: car `paint_job` system observed (OBSERVED-IN-MODS above). How an addon follows body colour is still OPEN; the mechanism for non-paint-job accessories is UNKNOWN.
 
 - Documented: `accessory_paint_job_data` (paint_job_mask .tobj, mask_r/g/b_color, base_color, base_texture_override for the "truckpaint" material, flipflake, airbrush; colormask applies blue, green, red) https://modding.scssoft.com/wiki/Documentation/Engine/Units/accessory_paint_job_data and `vehicle_paint_job_accessory` (data_path, wear, colour overrides) https://modding.scssoft.com/wiki/Documentation/Engine/Units/vehicle_paint_job_accessory.
 - Not documented: how an addon (mirror, fender, shell) follows body colour; the material name or flags. A community hint places accessory paint info under `paint_job/accessory/` (https://steamcommunity.com/app/227300/discussions/0/1640915206449027184/).
@@ -70,10 +92,10 @@ Dealer data for the 2023 F-150 (https://www.greghublerford.com/2023-ford-f-150-b
 
 | # | Unknown | Resolve on gaming PC by |
 | --- | --- | --- |
-| 1 | F-150 def path and unit names | Install Road Trip: Ford, extract the DLC archive with the Conversion Tools or an extractor, search for the F-150 vehicle def |
-| 2 | Existence of a bed-cover or shell slot type | List the F-150 accessory folders and types; compare with the `load_bed` precedent |
+| 1 | F-150 def path and unit names | resolved-pending-DLC-confirmation: `def/vehicle/car/ford.f150_23/`, cabin `pckup4d_55.ford.f150_23.cabin`, chassis `4d55_awd.ford.f150_23.chassis`. Confirm in the extracted DLC archive |
+| 2 | Bed slot: no vanilla slot seen | Likely need to declare a NEW slot, which means editing or overriding the dealer or cabin def. Conflict risk with other mods touching those defs. Confirm in extracted defs; compare with the `load_bed` precedent |
 | 3 | How `load_bed` and new accessory types are declared | Subscribe to the Pickup Load Pack for reference, inspect only structure, do not copy |
-| 4 | Body-colour matching for addons | See Paint mechanism; match a vanilla addon, then test two colours |
+| 4 | Body-colour matching for addons: car `paint_job` system observed; how addons follow body colour open | See Paint mechanism; match a vanilla addon under `paint_job/`, then test two colours |
 | 5 | Real bed dimensions and origin/axes | Measure the F-150 bed model or locators in Blender after import; update `config/v1.json` |
 | 6 | Blender Tools 2.4.1 and Conversion Tools 2.21 handle Road Trip assets | Import the vehicle model, export a tiny original mesh, convert, load in game |
 | 7 | manifest.sii fields, icon and preview sizes, ATS build | Check a working Workshop mod's manifest, the Uploader validator output, and the in-game version string |
