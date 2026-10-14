@@ -1,0 +1,29 @@
+SiiNunit
+{
+# TEMPLATE. Fill every TODO from the Road Trip DLC defs extracted into local-reference/ on the
+# gaming PC (see docs/gaming-pc-setup.md). The TODO_* directory names above must also be renamed
+# to the real vehicle unit and accessory slot paths; package.py refuses to package until no TODO
+# remains. Attribute list: modding.scssoft.com/wiki/Documentation/Engine/Units/accessory_data and
+# .../accessory_addon_data (checked 2026-10-14).
+
+# UNVERIFIED: the unit type and unit-name pattern for a bed accessory in this DLC. Copy from a stock
+# addon in the extracted defs; accessory_addon_data is only the documented generic add-on type.
+accessory_addon_data : TODO_UNIT_NAME.f150_camper_shell
+{
+	name: "F-150 Camper Shell"
+	price: 0                                    # TODO: price in USD; 0 hides it from the player
+	unlock: 0                                   # TODO: minimum player level
+	part_type: aftermarket                      # documented values: factory aftermarket licensed unknown
+	icon: "TODO_ICON_PATH"                      # relative to /material/ui/accessory/, no extension
+	suitable_for[]: "TODO_F150_UNIT_NAME"       # TODO: unit name/wildcard of the F-150 chassis or bed
+	# conflict_with[]: "TODO"                   # TODO: stock bed covers/caps that cannot coexist
+	# overrides[]: "TODO"                       # only if replacing a stock accessory
+
+	exterior_model: "/vehicle/truck/upgrade/f150_bed_shell/shell.pmd"
+	# interior_model: ""                        # not needed for V1 exterior shell
+	# coll: ""                                  # TODO: collision (.pmc) if the shell needs one
+	look: "default"                             # TODO: must be a look present in ALL models
+	variant: "default"                          # TODO: must be a variant present in ALL models
+	# hide_in: 0                                # TODO: hide from mirrors if reflective textures
+}
+}

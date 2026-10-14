@@ -1,0 +1,11 @@
+{
+  "_comment": "Copy to config/tools.local.json (gitignored) and set paths for this machine. Relative paths resolve from the repo root.",
+  "machine": "surface | gaming-pc",
+  "blender_exe": "tools/blender-3.6.23-windows-x64/blender.exe",
+  "blender_expected_version": "3.6.23",
+  "scs_blender_tools_zip": "tools/SCS_Blender_Tools.zip",
+  "conversion_tools_dir": "tools/conversion_tools",
+  "game_archive_extractor_exe": "tools/scs_extractor.exe",
+  "ats_mod_dir": "C:/Users/<you>/Documents/American Truck Simulator/mod",
+  "ats_game_log": "C:/Users/<you>/Documents/American Truck Simulator/game.log.txt"
+}

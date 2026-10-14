@@ -1,0 +1,8 @@
+F-150 Camper Shell
+Free community mod by RTech Digital (xx-r0ger-xx).
+
+Adds a bed camper shell accessory for the Ford F-150 from the Road Trip: Ford DLC, with the shell
+painted to match the truck body color. Requires American Truck Simulator and the Road Trip: Ford DLC.
+
+All geometry and textures are original work. Not affiliated with or endorsed by SCS Software or
+Ford Motor Company. Early development build: test in a separate profile first.

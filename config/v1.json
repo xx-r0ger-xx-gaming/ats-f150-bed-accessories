@@ -1,0 +1,103 @@
+{
+  "_comment": "V1 cab-high bed shell. All lengths in metres. Values marked UNVERIFIED in docs/compatibility.md must be replaced with measurements from the Road Trip F-150 (gaming PC) before production fit.",
+  "name": "f150_bed_shell_v1",
+  "seed": 1500,
+  "units": "metres",
+  "axes": {
+    "_comment": "Blender scene axes as authored. SCS Blender Tools handles the Blender->game axis conversion on export; verify facing in the first export test.",
+    "up": "+Z",
+    "forward": "+Y"
+  },
+  "origin": {
+    "_comment": "Object origin = top of bed rails, centred left/right, at the bed's front wall. Must match the accessory locator found in the vehicle defs (UNVERIFIED).",
+    "offset": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "bed": {
+    "_comment": "UNVERIFIED placeholders based on a 5.5 ft (67.1 in) F-150 bed; replace from measured in-game model.",
+    "length_at_rails": 1.71,
+    "width_at_rails": 1.66,
+    "cab_height_above_rails": 0.48
+  },
+  "shell": {
+    "front_rake": 0.06,
+    "rear_rake": 0.14,
+    "side_tumblehome": 0.05,
+    "roof_crown": 0.02,
+    "wall_thickness": 0.012,
+    "edge_bevel": 0.035,
+    "bevel_segments": 3,
+    "height_offset_from_cab": 0.0,
+    "rail_trim_height": 0.03,
+    "rail_trim_outset": 0.008
+  },
+  "windows": {
+    "side_inset_front": 0.12,
+    "side_inset_rear": 0.1,
+    "side_inset_top": 0.06,
+    "side_inset_bottom": 0.07,
+    "rear_hatch_frame": 0.05,
+    "glass_offset": 0.002
+  },
+  "materials": {
+    "shell_paint": {
+      "base_color": [
+        0.55,
+        0.08,
+        0.06,
+        1.0
+      ],
+      "roughness": 0.25,
+      "role": "body_paint"
+    },
+    "glass": {
+      "base_color": [
+        0.02,
+        0.03,
+        0.04,
+        1.0
+      ],
+      "roughness": 0.05,
+      "alpha": 0.85,
+      "role": "glass"
+    },
+    "trim": {
+      "base_color": [
+        0.02,
+        0.02,
+        0.02,
+        1.0
+      ],
+      "roughness": 0.6,
+      "role": "trim"
+    }
+  },
+  "render": {
+    "surface": {
+      "engine": "BLENDER_EEVEE",
+      "resolution": [
+        1280,
+        720
+      ],
+      "samples": 32
+    },
+    "gaming": {
+      "engine": "CYCLES",
+      "device": "GPU",
+      "resolution": [
+        1920,
+        1080
+      ],
+      "samples": 256
+    }
+  },
+  "scs": {
+    "_comment": "UNVERIFIED placeholders. model_path is relative to the SCS project base (the --output dir); real game def path/accessory name must come from the vehicle defs on the gaming PC.",
+    "model_path": "vehicle/truck/upgrade/f150_bed_shell",
+    "model_name": "shell",
+    "export_output_type": "5"
+  }
+}

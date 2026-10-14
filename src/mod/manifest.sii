@@ -1,0 +1,18 @@
+SiiNunit
+{
+# Fields per modding.scssoft.com/wiki/Documentation/Engine/Mod_manager (checked 2026-10-14).
+mod_package : .f150_camper_shell
+{
+	package_version: "0.1.0"
+	display_name: "F-150 Camper Shell"
+	author: "RTech Digital / xx-r0ger-xx"
+	category[]: "tuning_parts"
+	icon: "mod_icon.jpg"
+	description_file: "mod_description.txt"
+
+	# UNVERIFIED: the package name of the Road Trip DLC (pattern is "dlc_<name>", e.g. dlc_north).
+	# Find it on the gaming PC (dlc_*.scs file name in the ATS install). package.py refuses to
+	# build while TODO markers remain.
+	dlc_dependencies[]: "TODO_ROADTRIP_DLC_ID"
+}
+}
