@@ -3,7 +3,7 @@ bed rails with corner uprights, MOLLE-slotted side panels, top side rails and cr
 roof, plus overlanding gear: hard-shell rooftop tent on the crossbars, two recovery boards, jerry cans, a
 shovel, a packed side awning, a light bar on the front crossbar and a cargo case in the bed.
 
-Everything is fitted from truck_info (rail top = z 0, bed front wall = y 0). camper.loadout: "full"
+Everything is fitted from the shared bed dimensions cfg["bed"] (lib/bed.py, config/bed.json). camper.loadout: "full"
 (default) or "bare" (rack only) - the fixed combinations planned for the game (see docs/roadmap.md).
 """
 import math
@@ -49,19 +49,20 @@ def _materials(mats):
 class Frame:
     """Rack layout in the pickup variant frame (metres)."""
 
-    def __init__(self, cp, ti):
+    def __init__(self, cp, bed):
         self.t = cp.get("tube", 0.05)                     # square tube size
-        ihw, ohw = ti["bed_inner_hw"], ti["rail_outer_hw"]
-        self.xr = (ihw + ohw) / 2                          # tube centreline over the middle of the rail cap
-        self.yf = -cp.get("front_gap", 0.03) - self.t / 2  # front upright centre (cab back is at +y)
-        rear = ti.get("bed_inner_rear_y", ti["tailgate_y"] + 0.05)
-        self.yr = rear + self.t / 2 + cp.get("rear_inset", 0.0)
-        self.z_top = ti["roof_z"] - cp.get("top_below_roof", 0.02)  # top of the side rails / crossbars
-        self.z_foot = cp.get("foot_clearance", 0.003)
+        self.yf = bed["front_wall_inner_y"] - cp.get("front_gap", 0.03) - self.t / 2  # front upright centre
+        self.yr = bed["bed_inner_rear_y"] + self.t / 2 + cp.get("rear_inset", 0.0)
+        # straight side frames over the middle of the rail cap where it is narrowest (the bed tapers
+        # toward the tailgate), so the clamp feet stay on the cap from front to rear
+        self.xr = bed.rail_mid_hw_at(self.yr)
+        self.foot_hw = min(0.035, 0.5 * (bed.rail_outer_hw_at(self.yr) - bed["rail_inner_hw"]) - 0.002)
+        self.z_top = bed["cab_roof_z"] - cp.get("top_below_roof", 0.02)  # top of the side rails / crossbars
+        self.z_foot = bed["rail_top_z"] + cp.get("foot_clearance", 0.0005)
         self.z_base0 = self.z_foot + 0.010                 # base rail bottom (on clamp feet)
         self.z_base1 = self.z_base0 + 0.04
         self.z_rail0 = self.z_top - 0.045                  # top side rail bottom
-        self.ihw = ihw
+        self.ihw = bed["bed_inner_hw"]
 
 
 # ------------------------------------------------------------------ rack
@@ -102,7 +103,7 @@ def _rack(cp, fr, collection, mats):
         x = sx * xr
         # clamp feet on the rail cap (the clamps hook under the rail lip, hidden inside the bed)
         for y in (fr.yf, (fr.yf + fr.yr) / 2, fr.yr):
-            box(p, (x - 0.04, y - 0.06, fr.z_foot), (x + 0.04, y + 0.06, fr.z_base0), "br_powder", 0.003)
+            box(p, (x - fr.foot_hw, y - 0.06, fr.z_foot), (x + fr.foot_hw, y + 0.06, fr.z_base0), "br_powder", 0.003)
             cylinder_z(p, x, y, 0.009, fr.z_base1, fr.z_base1 + 0.004, "br_hw", seg=12)
         # base rail along the bed rail
         box(p, (x - t / 2, fr.yr - t / 2, fr.z_base0), (x + t / 2, fr.yf + t / 2, fr.z_base1), "br_powder", 0.004)
@@ -150,10 +151,14 @@ def _rounded_slab(p, x0, x1, y0, y1, z0, z1, r, key, seg=4):
     prism_z(p, rounded_rect(x0, x1, y0, y1, r, seg), z0, z1, key)
 
 
-def _tent(cp, fr, collection, mats):
-    """Low hard-shell rooftop tent (clamshell, closed): base tray, canvas band, domed lid, latches."""
+def _tent(cp, fr, bed, collection, mats):
+    """Low hard-shell rooftop tent (clamshell, closed): base tray, canvas band, domed lid, latches.
+    Front tent_front_gap behind the bed front wall, rear tent_rear_overhang past the closed tailgate
+    face (0 = flush)."""
     p = Part(P + "_tent", mats)
-    hw, yf, yr = cp.get("tent_half_width", 0.68), cp.get("tent_front_y", -0.12), cp.get("tent_rear_y", -1.92)
+    hw = cp.get("tent_half_width", 0.68)
+    yf = bed["front_wall_inner_y"] - cp.get("tent_front_gap", 0.12)
+    yr = bed["tailgate_face_y"] - cp.get("tent_rear_overhang", 0.0)
     z0 = fr.z_top + 0.025
     # mounting brackets on each crossbar (L-feet under the tray)
     for y in (fr.yf, (fr.yf + fr.yr) / 2, fr.yr):
@@ -318,13 +323,13 @@ def _light_bar(fr, collection, mats):
 
 
 def build(cfg, collection, mats):
-    cp, ti = cfg["camper"], cfg["truck_info"]
+    cp, bed = cfg["camper"], cfg["bed"]
     _materials(mats)
-    fr = Frame(cp, ti)
+    fr = Frame(cp, bed)
     objs = [_rack(cp, fr, collection, mats)]
     if cp.get("loadout", "full") == "bare":
         return objs
-    objs.append(_tent(cp, fr, collection, mats))
+    objs.append(_tent(cp, fr, bed, collection, mats))
     objs.append(_light_bar(fr, collection, mats))
     # driver side (-x, the side the standard views show): recovery boards on the front bay, a jerry can on
     # the rear bay, packed awning above the top rail
@@ -334,8 +339,8 @@ def build(cfg, collection, mats):
     # passenger side: second jerry can and the shovel
     objs.append(_side_gear(fr, collection, mats, 1, P + "_gear_right", [fr.yr + 0.215], fr.yf - 0.06))
     # cargo case in the bed (reuses the overland canopy's rotomoulded case)
-    floor = ti.get("bed_floor_z", -0.52)
-    # (the floor is ribbed: sit 3 cm up, on the rib tops)
-    case = _case(P + "_bed_case", 0.0, cp.get("case_y", -0.95), floor + 0.03, 0.78, 0.46, 0.26, collection, mats)
+    # (the floor is ribbed: the case stands on the rib tops)
+    case = _case(P + "_bed_case", 0.0, cp.get("case_y", -0.95), bed["bed_floor_rib_z"] + 0.002, 0.78, 0.46, 0.26,
+                 collection, mats)
     objs.append(case)
     return objs

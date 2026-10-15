@@ -1195,7 +1195,7 @@ def build_reference_truck(spec, mats, collection):
     # ---- optional: remove the tailgate (faces of the gate box behind the bed floor)
     if s["tailgate"] == "removed":
         for ob in objs:
-            removed += _delete_faces(ob, lambda m, c: (abs(c.x - xc) < inner_hw + 0.02 and tail_out - 0.02 < c.y < yb_r + 0.005
+            removed += _delete_faces(ob, lambda m, c: (abs(c.x - xc) < inner_hw + 0.02 and tail_out - 0.07 < c.y < yb_r + 0.005
                                                        and floor + 0.025 < c.z < rail + 0.05))
     for bx in s.get("badge_boxes", []):
         lo_b, hi_b = Vector(bx[0]), Vector(bx[1])

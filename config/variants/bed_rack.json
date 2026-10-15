@@ -1,5 +1,5 @@
 {
-  "_comment": "Generic overland bed rack (original geometry, unbranded) on the reference pickup: powder-coated black frame clamped to the bed rails, MOLLE-slotted side panels, crossbars just below the cab roof; full loadout = hard-shell rooftop tent, 2 recovery boards, 2 jerry cans, shovel, packed awning, light bar, cargo case in the bed. camper.loadout 'bare' renders the rack alone. Render-only; nothing here is exported.",
+  "_comment": "Generic overland bed rack (original geometry, unbranded) on the reference pickup: powder-coated black frame clamped to the bed rails, MOLLE-slotted side panels, crossbars just below the cab roof; full loadout = hard-shell rooftop tent (rear flush with the tailgate face), 2 recovery boards, 2 jerry cans, shovel, packed awning, light bar, cargo case in the bed. camper.loadout 'bare' renders the rack alone. Render-only; nothing here is exported.",
   "name": "bed_rack",
   "title": "Overland bed rack",
   "camper": {
@@ -8,10 +8,10 @@
     "tube": 0.05,
     "front_gap": 0.03,
     "top_below_roof": 0.02,
-    "foot_clearance": 0.003,
+    "foot_clearance": 0.0005,
     "tent_half_width": 0.68,
-    "tent_front_y": -0.12,
-    "tent_rear_y": -1.92,
+    "tent_front_gap": 0.12,
+    "tent_rear_overhang": 0.0,
     "case_y": -0.95
   },
   "truck": {"type": "pickup", "source": "reference"},

@@ -66,13 +66,15 @@ def offset_rect(u0, u1, v0, v1, r, d, seg=4):
 
 class Geo:
     def __init__(self, cfg):
-        c, ti = cfg["camper"], cfg["truck_info"]
+        c, ti, bed = cfg["camper"], cfg["truck_info"], cfg["bed"]
         self.hw = c.get("half_width", 1.08)
-        self.yr = ti["tailgate_y"] - c.get("rear_overhang", 0.50)
+        self.yr = bed["tailgate_face_y"] - c.get("rear_overhang", 0.50)   # overhang past the (closed) gate line
         self.z0 = 0.045                        # wing-wall floor: visible gap above the bed rails
         self.ztop = c.get("roof_above_rails", 1.52)
-        self.zc = ti["roof_z"] + c.get("cabover_floor_above_cab_roof", 0.11)
-        self.yb = ti["cab_back_y"] - 0.04            # camper front wall: 4 cm clear of the cab back
+        self.zc = bed["cab_roof_z"] + c.get("cabover_floor_above_cab_roof", 0.11)
+        # camper front wall: cab_gap clear of the cab back at the wing-wall floor (the cab leans
+        # forward with height, so the gap only grows above)
+        self.yb = bed.cab_back_at(self.z0) - c.get("cab_gap", 0.04)
         self.yn = c.get("cabover_nose_y", 1.40)
         # front face of the nose: from (yn - 0.04, zc + 0.15) to (yn, zc + 0.55)
         self.ff0 = (self.yn - 0.06, self.zc + 0.18)
@@ -83,6 +85,8 @@ class Geo:
         self.sl0 = (self.yn, self.zc + 0.54)
         self.sl1 = (self.yn - 0.42, self.ztop)
         self.ti = ti
+        self.bed = bed
+        self.c = c
 
     def side(self, sgn):
         hw = self.hw
@@ -210,20 +214,28 @@ def build_body(g, mats, col):
     # Tailgate down/removed: it fills the bed to the bed end like a real unit (gelcoat, a rubber
     # bumper strip at the floor and a dark rear trim band), visible under the rear overhang.
     bp = Part(f"{NAME}_basement", mats)
-    ti = g.ti
-    bhw = min(ti["bed_inner_hw"] - 0.04, 0.80)
-    BED_FLOOR = ti.get("bed_floor_z", -0.52) + 0.005       # basement floor 5 mm above the bed floor
-    ybf = min(yb - 0.02, -0.012)                             # basement front: clear of the bed front wall
+    ti, bed = g.ti, g.bed
+    # stepped like a real half-ton unit: narrow between the wheel housings, full width above them
+    # (inside the rail-cap lips); all from the shared bed dimensions
+    lhw = bed["wheelhouse_inner_hw"] - 0.015
+    bhw = bed["rail_inner_hw"] - 0.03                      # clear of the rail-cap lips / tie-down cleats
+    BED_FLOOR = bed["bed_floor_rib_z"] + 0.003             # on the floor ribs
+    zstep = bed["wheelhouse_top_z"] + 0.015
+    ybf = min(yb - 0.02, bed["front_wall_inner_y"] - 0.05)   # clear of the corrugated bed front wall
     if ti.get("tailgate", "closed") == "closed":
-        box(bp, (-bhw, ti["tailgate_y"] + 0.07, BED_FLOOR), (bhw, ybf, z0 + 0.02), "underbody", bev=0.02)
+        ye = bed["bed_inner_rear_y"] + 0.01
+        box(bp, (-lhw, ye, BED_FLOOR), (lhw, ybf, zstep + 0.01), "underbody", bev=0.02)
+        box(bp, (-bhw, ye, zstep), (bhw, ybf, z0 + 0.02), "underbody", bev=0.02)
     else:
-        ye = ti["tailgate_y"] - 0.02
-        box(bp, (-bhw, ye, BED_FLOOR), (bhw, ybf, z0 + 0.02), "sl_gel", bev=0.02)
-        box(bp, (-bhw + 0.01, ye - 0.035, BED_FLOOR), (bhw - 0.01, ye + 0.02, BED_FLOOR + 0.06), "rubber", bev=0.008)
+        ye = bed["bed_inner_rear_y"] + 0.005               # at the end of the bed floor (gate removed)
+        box(bp, (-lhw, ye, BED_FLOOR), (lhw, ybf, zstep + 0.01), "sl_gel", bev=0.02)
+        box(bp, (-bhw, ye, zstep), (bhw, ybf, z0 + 0.02), "sl_gel", bev=0.02)
+        box(bp, (-lhw + 0.01, ye - 0.012, BED_FLOOR + 0.004), (lhw - 0.01, ye + 0.02, BED_FLOOR + 0.06), "rubber",
+            bev=0.008)
         box(bp, (-bhw + 0.01, ye - 0.006, -0.20), (bhw - 0.01, ye + 0.01, -0.17), "sl_stripe")
-        for sgn in (-1, 1):              # basement tail/marker lamps low on the rear face
+        for sgn in (-1, 1):              # basement tail/marker lamps on the upper (full-width) part
             a_, b_ = sorted((sgn * (bhw - 0.06), sgn * (bhw - 0.16)))
-            box(bp, (a_, ye - 0.012, -0.36), (b_, ye + 0.01, -0.30), "lamp_red_lens", bev=0.006)
+            box(bp, (a_, ye - 0.012, zstep + 0.03), (b_, ye + 0.01, zstep + 0.09), "lamp_red_lens", bev=0.006)
     return [body, bp.finish(col, smooth=35)]
 
 
@@ -429,17 +441,17 @@ def jacks(g, p):
 
 def tie_downs(g, p):
     """Frame-mounted tie-down receivers under the bed sides + spring-loaded turnbuckles up to the
-    camper's corner brackets (front pair just behind the cab, rear pair behind the rear wheels);
-    rubber pads on the bed rails under the wing walls."""
+    camper's corner brackets (front pair just behind the cab, rear pair behind the rear wheels)."""
     ti = g.ti
-    zr = ti["bed_floor_z"] if "bed_floor_z" in ti else -0.52
-    zrx = -0.80                                        # receiver tube, just under the bed sides
+    zrx = g.c.get("tiedown_z", -0.96)                  # receiver tube, under the frame (clear of the body)
     xo = g.hw - 0.035                                  # bracket / turnbuckle line (outside the bed side)
     arch = ti["tire_radius"] + 0.17                       # clear of the rear wheel opening + flare
-    for yc in (min(ti["rear_axle_y"] + arch, g.yb - 0.20), ti["rear_axle_y"] - arch):
+    # front pair just ahead of the rear wheel opening, in the clear strip under the bed (checked
+    # against the reference truck with scripts/check_fit.py)
+    for yc in (min(ti["rear_axle_y"] + arch - 0.04, g.yb - 0.12), ti["rear_axle_y"] - arch):
         for sgn in (-1, 1):
             xa, xb = sorted((sgn * 0.56, sgn * (xo + 0.04)))
-            box(p, (xa, yc - 0.035, zrx - 0.035), (xb, yc + 0.035, zrx + 0.035), "sl_frame", bev=0.006)
+            box(p, (xa, yc - 0.022, zrx - 0.03), (xb, yc + 0.022, zrx + 0.03), "sl_frame", bev=0.006)
             xc = sgn * xo
             box(p, (xc - 0.03, yc - 0.03, zrx + 0.03), (xc + 0.03, yc + 0.03, zrx + 0.07), "sl_frame", bev=0.006)
             # camper bracket under the wing wall
@@ -451,13 +463,19 @@ def tie_downs(g, p):
             cylinder_z(p, xc, yc, 0.026, zm - 0.16, zm + 0.10, "lamp_red_lens", seg=14)   # red spring sleeve
             cylinder_z(p, xc, yc, 0.018, zm + 0.10, zm + 0.17, "steel", seg=12)
             cylinder_z(p, xc, yc, 0.02, zm - 0.20, zm - 0.16, "steel", seg=12)
-    # rubber pads between the wing walls and the bed rails
-    xr = ti["rail_outer_hw"] - 0.05
+
+
+def rail_pads(g, p):
+    """Rubber pads between the wing walls and the bed rails: centred on the rail caps, standing on them."""
+    bed = g.bed
     n = 5
+    y0, y1 = bed["front_wall_inner_y"] - 0.15, bed["bed_inner_rear_y"] + 0.12
     for k in range(n):
-        y = -0.15 - k * (ti["bed_length"] - 0.30) / (n - 1)
+        y = y0 + (y1 - y0) * k / (n - 1)
+        xr = bed.rail_mid_hw_at(y)
         for sgn in (-1, 1):
-            box(p, (sgn * xr - 0.035, y - 0.06, 0.0), (sgn * xr + 0.035, y + 0.06, g.z0 + 0.002), "rubber", bev=0.004)
+            box(p, (sgn * xr - 0.033, y - 0.06, bed["rail_cap_z"] - 0.001), (sgn * xr + 0.033, y + 0.06, g.z0 + 0.002),
+                "rubber", bev=0.004)
 
 
 def build(cfg, collection, mats):
@@ -474,6 +492,9 @@ def build(cfg, collection, mats):
     jacks(g, p)
     tie_downs(g, p)
     objs.append(p.finish(collection, smooth=35))
+    pads = Part(f"{NAME}_rail_pads", mats)
+    rail_pads(g, pads)
+    objs.append(pads.finish(collection, smooth=35))
     tris = sum(len(pl.vertices) - 2 for o in objs for pl in o.data.polygons)
     print(f"[{NAME}] camper triangles: {tris}")
     return objs

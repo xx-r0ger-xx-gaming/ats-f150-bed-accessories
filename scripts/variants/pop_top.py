@@ -13,6 +13,9 @@ Parameters (cfg["camper"], all optional):
   struts              gas struts at the four corners when deployed (bool)
   lid_lip             depth of the drip lip skirt under the lid edge (m)
   closed_gap          travel pose: lid height above the base top, filled by the folded canvas (m)
+  cab_gap, seal_min   base front face clearance to the cab back / minimum rail-seal height (m)
+
+The base footprint comes from the shared bed dimensions (cfg["bed"], lib/bed.py Bed.footprint).
 
 Original geometry only (no logos/brands). Render-only, never exported.
 """
@@ -22,8 +25,10 @@ import bmesh
 from mathutils import Matrix, Vector
 
 from lib.meshkit import (
-    Part, add_weighted_normals, annulus_prism, box, cut_openings, faces_of, loft, rounded_rect, set_smooth,
+    Part, add_weighted_normals, annulus_prism, box, build_prism, cut_openings, faces_of, loft, rounded_rect,
+    set_smooth,
 )
+from lib.shell_v1 import strip_fill
 
 TRUCK_TYPES = ("pickup",)
 DESCRIPTION = "Pop-top camper (raised lid, fabric tent walls)"
@@ -133,14 +138,16 @@ def _offset(ol, d):
     return out
 
 
-def _glaze(part, ol, mapper, outward):
-    """Smoked pane 12 mm under the skin + rubber seal lip around the opening (mapper(u, v, d))."""
+def _glaze(part, ol, mapper, outward, strips=False):
+    """Smoked pane 12 mm under the skin + rubber seal lip around the opening (mapper(u, v, d)).
+    strips=True builds the pane from vertical strips (for a curved face)."""
     bm = part.bm
-    pane = bm.faces.new([bm.verts.new(mapper(u, v, -0.012)) for u, v in ol])
-    pane.normal_update()
-    if pane.normal.dot(Vector(outward)) < 0:
-        pane.normal_flip()
-    part.set_mat([pane], "glass_tint")
+    for poly in (strip_fill(ol) if strips else [ol]):
+        pane = bm.faces.new([bm.verts.new(mapper(u, v, -0.012)) for u, v in poly])
+        pane.normal_update()
+        if pane.normal.dot(Vector(outward)) < 0:
+            pane.normal_flip()
+        part.set_mat([pane], "glass_tint")
     for (d_in, d_out, a, b, key) in ((-0.012, 0.0, -0.016, 0.003, "seal"), (0.0, 0.016, -0.002, 0.005, "seal")):
         o, i = _offset(ol, d_out), _offset(ol, d_in)
         faces = annulus_prism(bm, [mapper(u, v, a) for u, v in o], [mapper(u, v, b) for u, v in o],
@@ -152,11 +159,85 @@ def _tris(objs):
     return sum(sum(len(pl.vertices) - 2 for pl in o.data.polygons) for o in objs if o.type == "MESH")
 
 
+# ------------------------------------------------------------------ fitted footprint helpers
+
+def _dense_section(pts, bot_i, top_i, n):
+    """Insert n points into the bottom edge (pts[bot_i] -> pts[bot_i + 1]) and the top edge of a
+    closed section so a rear-bow warp can bend those faces. Returns (points, source segment index
+    per new segment, bottom-run start, top-run start); each run has n + 2 points, x running
+    -x -> +x along the bottom and +x -> -x along the top."""
+    out, src = [], []
+    starts = {}
+    m = len(pts)
+    for i in range(m):
+        a, b = Vector(pts[i]), Vector(pts[(i + 1) % m])
+        if i in (bot_i, top_i):
+            starts[i] = len(out)
+            k = n + 1
+            for j in range(k):
+                out.append(tuple(a.lerp(b, j / k)))
+                src.append(i)
+        else:
+            out.append(tuple(a))
+            src.append(i)
+    return out, src, starts[bot_i], starts[top_i]
+
+
+def _cap_strips(part, ring, bstart, tstart, n, key):
+    """Cap a densified section ring (BMVerts) with vertical strips + two side polygons."""
+    bm = part.bm
+    m = n + 1
+    L = len(ring)
+    B = [ring[(bstart + k) % L] for k in range(m + 1)]
+    T = [ring[(tstart + k) % L] for k in range(m + 1)]
+    faces = [bm.faces.new([B[k], B[k + 1], T[m - k - 1], T[m - k]]) for k in range(m)]
+    right = [ring[i % L] for i in range(bstart + m, tstart + 1)]
+    left = [ring[i % L] for i in range(tstart + m, bstart + L + 1)]
+    for poly in (right, left):
+        if len(poly) >= 3:
+            faces.append(bm.faces.new(poly))
+    part.set_mat(faces, key)
+    return faces
+
+
+def _side_bar(part, sx, x_in, x_out, y0, y1, z0, z1, key):
+    """Bar along a tapered side: x_in(y) / x_out(y) give its inner/outer half widths."""
+    rings = []
+    for y in (y0, y1):
+        xi, xo = x_in(y), x_out(y)
+        rings.append([(sx * xi, y, z0), (sx * xo, y, z0), (sx * xo, y, z1), (sx * xi, y, z1)])
+    faces = build_prism(part.bm, rings[0], rings[1])
+    bmesh.ops.recalc_face_normals(part.bm, faces=faces)
+    part.set_mat(faces, key)
+
+
+def _x_boxes(part, x0, x1, lo_yz, hi_yz, key, n=16, bev=0.0):
+    """A box spanning x0..x1, split into n segments so the rear-bow warp can bend it."""
+    for i in range(n):
+        a, b = x0 + (x1 - x0) * i / n, x0 + (x1 - x0) * (i + 1) / n
+        box(part, (a, lo_yz[0], lo_yz[1]), (b, hi_yz[0], hi_yz[1]), key, bev=bev)
+
+
+def _rear_warp(bed, fp, yr):
+    """Bend everything near the rear end (fully for y < yr + 0.06, fading out by yr + 0.30) rearward
+    by the tailgate bow, so a rear face built flat ends up flush with the curved tailgate."""
+    if fp["bow"] <= 1e-6:
+        return lambda part: None
+
+    def apply(part):
+        for v in part.bm.verts:
+            t = (yr + 0.30 - v.co.y) / 0.24
+            t = 1.0 if t >= 1.0 else (0.0 if t <= 0.0 else t * t * (3 - 2 * t))
+            if t:
+                v.co.y -= bed.rear_bow_at(v.co.x, fp) * t
+    return apply
+
+
 # ------------------------------------------------------------------ build
 
 def build(cfg, collection, mats):
     c = cfg["camper"]
-    ti = cfg["truck_info"]
+    bed = cfg["bed"]
     _materials(mats)
     deployed = c.get("state", "deployed") != "closed"
     gap = float(c.get("closed_gap", 0.03))       # travel pose: lid rests on the folded canvas
@@ -164,16 +245,23 @@ def build(cfg, collection, mats):
     lift_r = float(c.get("lift_rear", 0.92)) if deployed else gap
     deployed = deployed and max(lift_f, lift_r) > 0.05
 
-    # ---- base box footprint (variant frame: rail top z = 0, bed front wall y = 0)
-    hw = ti["rail_outer_hw"] + 0.012              # bottom half width (sits on the rails)
-    hwt = hw - 0.035                              # top half width (slight tumblehome)
-    yf = -0.012
-    yr = ti["tailgate_y"] - 0.025
-    zb = 0.012
-    zt = ti["roof_z"] + float(c.get("base_top_above_roof", 0.035))
+    # ---- base box footprint from the shared bed dimensions (lib/bed.py): on the rails, sides flush
+    # with the tapering rail caps, front cab_gap behind the cab, rear corners on the tailgate face and
+    # the rear end bowed like the tailgate (warp)
+    fp = bed.footprint(cab_gap=float(c.get("cab_gap", 0.04)), seal_min=float(c.get("seal_min", 0.012)))
+    yf, yr, zb = fp["y_front"], fp["y_rear"], fp["base_z"]
+    zt = bed["cab_roof_z"] + float(c.get("base_top_above_roof", 0.035))
+    warp = _rear_warp(bed, fp, yr)
+    ND = 16                                       # extra points across the bottom/top edges
 
-    def side_x(z):
-        return hw + (hwt - hw) * (z - zb) / ((zt - 0.04) - zb)
+    def hw(y):                                    # bottom half width: flush with the rail caps
+        return bed.rail_outer_hw_at(y)
+
+    def hwt(y):                                   # top half width (slight tumblehome)
+        return hw(y) - 0.035
+
+    def side_x(z, y):
+        return hw(y) + (hwt(y) - hw(y)) * (z - zb) / ((zt - 0.04) - zb)
 
     objs = []
 
@@ -181,41 +269,56 @@ def build(cfg, collection, mats):
     base = Part(f"{NAME}_base", mats)
 
     def base_sec(y, d, dz):
-        a, b_, top = hw - d, hwt - d, zt - dz
+        a, b_, top = hw(y) - d, hwt(y) - d, zt - dz
         sec = [(-a, zb), (a, zb), (b_, top - 0.04), (b_ - 0.014, top - 0.01), (b_ - 0.04, top),
                (-(b_ - 0.04), top), (-(b_ - 0.014), top - 0.01), (-b_, top - 0.04)]
-        return [(x, y, z) for x, z in sec]
+        pts, _, bs, ts = _dense_section(sec, 0, 4, ND)
+        return [(x, y, z) for x, z in pts], bs, ts
 
     stations = [(yr, 0.03, 0.014), (yr + 0.012, 0.009, 0.004), (yr + 0.035, 0, 0),
                 (yf - 0.035, 0, 0), (yf - 0.012, 0.009, 0.004), (yf, 0.03, 0.014)]
-    loft(base, [base_sec(*s) for s in stations], "pop_base")
-    # rail seal + bottom drip trim
+    secs = [base_sec(*s) for s in stations]
+    vr, _ = loft(base, [s[0] for s in secs], "pop_base", cap_start=False)
+    _cap_strips(base, vr[0], secs[0][1], secs[0][2], ND, "pop_base")
+    bmesh.ops.recalc_face_normals(base.bm, faces=base.bm.faces[:])
+    # rail seal under the base (sides, rear; front: on the raised bed front wall inboard of the
+    # rails, down to the rail caps outboard)
+    seal = Part(f"{NAME}_rail_seal", mats)
+    zs0, zs1 = bed["rail_cap_z"] - 0.001, zb + 0.004
     for sx in (-1, 1):
-        box(base, (min(sx * (hw + 0.006), sx * (hw - 0.07)), yr + 0.02, -0.004),
-            (max(sx * (hw + 0.006), sx * (hw - 0.07)), yf - 0.02, 0.016), "trim")
-    box(base, (-hw + 0.03, yr - 0.006, -0.004), (hw - 0.03, yr + 0.06, 0.016), "trim")
+        _side_bar(seal, sx, lambda y: hw(y) - 0.07, lambda y: hw(y) - 0.002, yr + 0.04, yf - 0.02, zs0, zs1, "trim")
+    _x_boxes(seal, -hw(yr) + 0.04, hw(yr) - 0.04, (yr + 0.004, zs0), (yr + 0.06, zs1), "trim")
+    xi = bed["rail_inner_hw"]
+    box(seal, (-xi, yf - 0.06, bed["front_wall_top_z"] - 0.001), (xi, yf - 0.004, zs1), "trim")
+    for sx in (-1, 1):
+        x0, x1 = sorted((sx * xi, sx * (hw(yf) - 0.07)))
+        box(seal, (x0, yf - 0.06, zs0), (x1, yf - 0.004, zs1), "trim")
+    warp(seal)
+    objs.append(seal.finish(collection, smooth=35))
     # rear hatch handle + third brake light
-    box(base, (-0.11, yr - 0.022, 0.07), (0.11, yr + 0.01, 0.095), "trim_gloss", bev=0.006)
+    box(base, (-0.11, yr - 0.022, zb + 0.058), (0.11, yr + 0.01, zb + 0.083), "trim_gloss", bev=0.006)
     box(base, (-0.16, yr - 0.004, zt - 0.055), (0.16, yr + 0.02, zt - 0.03), "lamp_red_lens", bev=0.004)
+    warp(base)
     base_ob = base.finish(collection, smooth=35)
 
     # windows: side windows (both sides) + rear hatch glass, as flush pockets
     openings = []
     glaze = Part(f"{NAME}_glazing", mats)
-    wz0, wz1 = 0.085, zt - 0.095
+    wz0, wz1 = zb + 0.073, zt - 0.095
     win_y0, win_y1 = yr + 0.20, yf - 0.16
     for sx in (-1, 1):
         def sp(y, z, d, sx=sx):                    # point on the side skin, d > 0 = outward
-            return (sx * (side_x(z) + d), y, z)
+            return (sx * (side_x(z, y) + d), y, z)
         ol = rounded_rect(win_y0, win_y1, wz0, wz1, 0.06, 4)
         openings.append(([sp(y, z, 0.03) for y, z in ol], [sp(y, z, -0.20) for y, z in ol]))
         _glaze(glaze, ol, sp, (sx, 0, 0))
-    ol = rounded_rect(-(hwt - 0.15), hwt - 0.15, 0.115, zt - 0.085, 0.06, 4)
+    hr = hwt(yr) - 0.15
+    ol = _densify(rounded_rect(-hr, hr, zb + 0.103, zt - 0.085, 0.06, 4), 0.05)
 
-    def rp(x, z, d):
-        return (x, yr - d, z)
-    openings.append(([rp(x, z, 0.04) for x, z in ol], [rp(x, z, -0.20) for x, z in ol]))
-    _glaze(glaze, ol, rp, (0, -1, 0))
+    def rp(x, z, d):                               # point on the (bowed) rear face
+        return (x, yr - bed.rear_bow_at(x, fp) - d, z)
+    openings.append(([rp(x, z, 0.04 + fp["bow"]) for x, z in ol], [rp(x, z, -0.20) for x, z in ol]))
+    _glaze(glaze, ol, rp, (0, -1, 0), strips=True)
     cut_openings(base_ob, openings, mats, collection, glass_key="curtain", wall_key="interior")
     objs.append(glaze.finish(collection, smooth=40))
     set_smooth(base_ob, 35)
@@ -230,28 +333,37 @@ def build(cfg, collection, mats):
     # ---------------------------------------------------------------- lid
     lid = Part(f"{NAME}_lid", mats)
     thk = float(c.get("lid_thickness", 0.11))
-    W = hwt + float(c.get("lid_side_overhang", 0.025))
-    ylr = yr - float(c.get("lid_rear_overhang", 0.04))
+    so = float(c.get("lid_side_overhang", 0.025))
+
+    def W(y):                                     # lid half width follows the base top
+        return hwt(min(y, yf)) + so
+    ylr = yr - float(c.get("lid_rear_overhang", 0.015))
     fo = float(c.get("lid_front_overhang", 0.34))
     ylf = yf + fo
     tip_h = 0.072
+    TRIM = {0, 1, 2, 10, 11}                      # bottom-band segments of the 12-point section
 
     def lid_sec(y, w, h):
         sec = [(-w + 0.015, 0), (w - 0.015, 0), (w, 0.015), (w, 0.034), (w, h - 0.03), (w - 0.01, h - 0.01),
                (w - 0.035, h), (-(w - 0.035), h), (-(w - 0.01), h - 0.01), (-w, h - 0.03), (-w, 0.034),
                (-w, 0.015)]
-        return [(x, y, zt + z) for x, z in sec]
+        pts, src, bs, ts = _dense_section(sec, 0, 6, ND)
+        return [(x, y, zt + z) for x, z in pts], src, bs, ts
 
-    lst = [(ylr, W - 0.035, thk - 0.02), (ylr + 0.012, W - 0.01, thk - 0.005), (ylr + 0.035, W, thk),
-           (yf - 0.06, W, thk)]
+    lst = [(ylr, W(ylr) - 0.035, thk - 0.02), (ylr + 0.012, W(ylr) - 0.01, thk - 0.005),
+           (ylr + 0.035, W(ylr + 0.035), thk), (yf - 0.06, W(yf - 0.06), thk)]
     for f in (0.25, 0.5, 0.72, 0.88):
-        lst.append((yf + f * fo, W - 0.035 * f ** 2, thk - (thk - tip_h) * f ** 1.4))
-    lst += [(ylf - 0.012, W - 0.035 - 0.012, tip_h - 0.004), (ylf, W - 0.035 - 0.04, tip_h - 0.014)]
-    rings, faces = loft(lid, [lid_sec(*s) for s in lst], "pop_lid")
-    n = 12
-    for k, f in enumerate(faces[:-2]):
-        if k % n in (0, 1, 2, 10, 11):
+        lst.append((yf + f * fo, W(yf) - 0.035 * f ** 2, thk - (thk - tip_h) * f ** 1.4))
+    lst += [(ylf - 0.012, W(yf) - 0.035 - 0.012, tip_h - 0.004), (ylf, W(yf) - 0.035 - 0.04, tip_h - 0.014)]
+    lsecs = [lid_sec(*s) for s in lst]
+    rings, faces = loft(lid, [s[0] for s in lsecs], "pop_lid", cap_start=False)
+    src = lsecs[0][1]
+    n = len(src)
+    for k, f in enumerate(faces[:(len(lst) - 1) * n]):
+        if src[k % n] in TRIM:
             f.material_index = lid.idx("trim")
+    _cap_strips(lid, rings[0], lsecs[0][2], lsecs[0][3], ND, "pop_lid")
+    bmesh.ops.recalc_face_normals(lid.bm, faces=lid.bm.faces[:])
     # low ribs on the lid top (stiffeners), follow the nose slope
     for xr in (-0.42, 0.0, 0.42):
         box(lid, (xr - 0.035, ylr + 0.12, zt + thk - 0.004), (xr + 0.035, yf - 0.10, zt + thk + 0.008),
@@ -259,39 +371,40 @@ def build(cfg, collection, mats):
     # drip lip: a skirt under the lid edge (sides + rear) that hangs past the base top
     lip = float(c.get("lid_lip", 0.012))
     for sx in (-1, 1):
-        xa, xb = sorted((sx * (W - 0.011), sx * (W + 0.001)))
-        box(lid, (xa, ylr + 0.035, zt - lip), (xb, yf - 0.06, zt + 0.03), "trim", bev=0.004)
-    box(lid, (-(W - 0.03), ylr + 0.010, zt - lip), (W - 0.03, ylr + 0.022, zt + 0.03), "trim", bev=0.004)
+        _side_bar(lid, sx, lambda y: W(y) - 0.011, lambda y: W(y) + 0.001, ylr + 0.035, yf - 0.06,
+                  zt - lip, zt + 0.03, "trim")
+    _x_boxes(lid, -(W(ylr) - 0.03), W(ylr) - 0.03, (ylr + 0.010, zt - lip), (ylr + 0.022, zt + 0.03), "trim")
+    warp(lid)
     lid_verts = list(lid.bm.verts)
     bmesh.ops.transform(lid.bm, matrix=M, verts=lid_verts)
     objs.append(lid.finish(collection, smooth=40, weighted=True))
 
     # ---------------------------------------------------------------- tent walls
     if deployed:
-        objs += _build_tent(c, collection, mats, M, hwt, yf, yr, zt, side_x)
+        objs += _build_tent(c, collection, mats, M, hwt, yf, yr, zt, side_x, warp)
     else:
-        objs.append(_folded_seam(collection, mats, M, hwt, yf, yr, zt, lift_f))
+        objs.append(_folded_seam(collection, mats, M, hwt(yr), yf, yr, zt, lift_f, warp))
         # over-centre latches on the base flank, hooks on the lid lip
         latch = Part(f"{NAME}_latches", mats)
-        W = hwt + float(c.get("lid_side_overhang", 0.025))
         for sx in (-1, 1):
             for yy in (yf - 0.25, yr + 0.25):
-                xs = side_x(zt - 0.08)
+                xs = side_x(zt - 0.08, yy)
                 x0, x1 = sorted((sx * (xs - 0.002), sx * (xs + 0.018)))
                 box(latch, (x0, yy - 0.03, zt - 0.11), (x1, yy + 0.03, zt - 0.05), "trim_gloss", bev=0.004)
                 x0, x1 = sorted((sx * (xs + 0.006), sx * (xs + 0.012)))
                 box(latch, (x0, yy - 0.012, zt - 0.06), (x1, yy + 0.012, zt + lift_f - 0.015), "steel", bev=0.002)
-                x0, x1 = sorted((sx * (W - 0.001), sx * (W + 0.006)))
+                x0, x1 = sorted((sx * (W(yy) - 0.001), sx * (W(yy) + 0.006)))
                 box(latch, (x0, yy - 0.022, zt + lift_f - 0.02), (x1, yy + 0.022, zt + lift_f + 0.012), "steel",
                     bev=0.002)
         objs.append(latch.finish(collection, smooth=35))
 
     print(f"[{NAME}] state={'deployed' if deployed else 'closed'} lift=({lift_f:.2f},{lift_r:.2f}) "
-          f"camper tris={_tris(objs)}")
+          f"footprint y {yf:+.3f}..{yr:+.3f} hw {hw(yf):.3f}->{hw(yr):.3f} bow {fp['bow']:.3f} "
+          f"base z {zb:+.3f} camper tris={_tris(objs)}")
     return objs
 
 
-def _folded_seam(collection, mats, M, hwt, yf, yr, zt, gap):
+def _folded_seam(collection, mats, M, hwt, yf, yr, zt, gap, warp):
     """Travel pose: the tent canvas folded into the gap between base top and lid, bulging out a
     little in soft irregular pleats, with the attachment channel visible at the base top."""
     hx = hwt - 0.035
@@ -309,14 +422,16 @@ def _folded_seam(collection, mats, M, hwt, yf, yr, zt, gap):
             ring.append(q)
         rings.append(ring)
     loft(part, rings, "pop_fabric", cap_start=False, cap_end=False)
+    warp(part)
     return part.finish(collection, smooth=70)
 
 
-def _build_tent(c, collection, mats, M, hwt, yf, yr, zt, side_x):
+def _build_tent(c, collection, mats, M, hwt, yf, yr, zt, side_x, warp):
+    """hwt(y), side_x(z, y): base top half width / base flank; warp(part) bends the rear end."""
     objs = []
     sag = float(c.get("fabric_sag", 0.032))
     folds = float(c.get("fabric_folds", 0.007))
-    hx = hwt - 0.05
+    hx = hwt(yr) - 0.05                           # narrowest (rear) base top: the tent fits it all along
     fy0, fy1 = yr + 0.05, yf - 0.05
     plan = Plan(rounded_rect(-hx, hx, fy0, fy1, 0.06, 3), 0.045)
 
@@ -374,6 +489,7 @@ def _build_tent(c, collection, mats, M, hwt, yf, yr, zt, side_x):
                     ring.append((q.x, q.y, q.z - 0.012 - dz))
             r3.append(ring)
         loft(fab, r3, "trim", cap_start=False, cap_end=False)
+    warp(fab)
     tent_ob = fab.finish(collection, smooth=60)
     objs.append(tent_ob)
 
@@ -440,6 +556,7 @@ def _build_tent(c, collection, mats, M, hwt, yf, yr, zt, side_x):
         window(plan.s_of(sx * hx, yc_side), side_w, 0.20, 0.80)
     window(plan.s_of(0.0, fy0), min(1.0, 2 * hx - 0.42), 0.17, 0.82)       # rear
     window(plan.s_of(0.0, fy1), min(0.70, 2 * hx - 0.6), 0.26, 0.72)       # front
+    warp(det)
     objs.append(det.finish(collection, smooth=50))
 
     # gas struts at the corners (outside the fabric, on the base/lid flanks)
@@ -448,8 +565,8 @@ def _build_tent(c, collection, mats, M, hwt, yf, yr, zt, side_x):
         for sx in (-1, 1):
             for ya, yb in ((yf - 0.10, yf - 0.34), (yr + 0.10, yr + 0.34)):
                 za = zt - 0.065
-                pa = Vector((sx * (side_x(za) + 0.026), ya, za))
-                pb = M @ Vector((sx * (hwt + 0.005), yb, zt - 0.006))
+                pa = Vector((sx * (side_x(za, ya) + 0.026), ya, za))
+                pb = M @ Vector((sx * (hwt(yb) + 0.005), yb, zt - 0.006))
                 d = pb - pa
                 L = d.length
                 body_end = pa + d * 0.56
@@ -458,9 +575,10 @@ def _build_tent(c, collection, mats, M, hwt, yf, yr, zt, side_x):
                 for p in (pa, pb):
                     _tube(st, p - d.normalized() * 0.035, p + d.normalized() * 0.035, 0.008, "steel", seg=8)
                 # brackets: base flank plate, lid underside block
-                box(st, (min(sx * side_x(za), sx * (side_x(za) + 0.03)), ya - 0.03, za - 0.035),
-                    (max(sx * side_x(za), sx * (side_x(za) + 0.03)), ya + 0.03, za + 0.025), "steel", bev=0.004)
-                blk = [M @ Vector(v) for v in ((sx * (hwt - 0.01), yb, zt + 0.003), )]
+                xa = side_x(za, ya)
+                box(st, (min(sx * xa, sx * (xa + 0.03)), ya - 0.03, za - 0.035),
+                    (max(sx * xa, sx * (xa + 0.03)), ya + 0.03, za + 0.025), "steel", bev=0.004)
+                blk = [M @ Vector(v) for v in ((sx * (hwt(yb) - 0.01), yb, zt + 0.003), )]
                 cx, cy, cz = blk[0]
                 box(st, (cx - 0.02, cy - 0.03, cz - 0.03), (cx + 0.02, cy + 0.03, cz + 0.004), "steel", bev=0.004)
         objs.append(st.finish(collection, smooth=40))

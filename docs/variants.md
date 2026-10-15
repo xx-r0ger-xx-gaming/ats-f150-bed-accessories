@@ -111,15 +111,69 @@ the transforms, scales it to `overall_length` (5.89 m), turns it to face +Y, the
   extra key), bed inner length/width, rail top (= mount), `rail_outer_hw`, cab roof, cab back,
   tailgate outer face (`tailgate_y`), axles (from the brake discs), tyre radius, track. Measured on
   the current file: rail 1.337 m, floor 0.776 m, roof 1.905 m, bed 1.650 x 1.632 m inside, wheelbase
-  3.70 m.
-- `tailgate`: `closed` or `removed` (deletes the gate faces between the bed sides); `down` is
-  procedural-only.
+  3.70 m. These are coarse single-ray values (one station, one height); campers do NOT fit to them:
+  they use the shared bed dimensions below.
+- `tailgate`: `closed` or `removed` (deletes the gate faces between the bed sides, including the
+  rearward lip under the gate top); `down` is procedural-only.
 
 Missing file: rendering stops with the download instructions (see `docs/gaming-pc-setup.md`). Drop
 `source` (or use `--set truck.source=procedural`) to render on the procedural pickup.
 
 Reference renders of the bare bases: `--variant _ref_pickup` (reference model),
 `--variant _ref_pickup_procedural`.
+
+### Bed dimensions (`config/bed.json`, shared by every bed-mounted variant)
+
+Every bed-mounted variant (`v1_shell`, `overland_canopy`, `pop_top` open/closed, `slide_in`,
+`bed_rack`) takes its footprint from ONE set of measured bed dimensions, `cfg["bed"]`
+(`lib.bed.Bed`, loaded by the runner from `config/bed.json`), never from per-variant constants or
+the coarse `truck_info` bed values. `active` picks the profile; a variant config may pin another with
+`"bed_profile"` (or `--set bed_profile=...`); the special name `truck` derives a coarse profile from
+the rendered truck (procedural fallback).
+
+**In-game numbers:** fill `profiles.ats_f150_ingame` (same keys and frame) from the Road Trip F-150
+on the gaming PC and set `"active": "ats_f150_ingame"`. That single change refits all six poses;
+renders on the reference model then show the in-game footprint (the runner warns that it will not
+sit exactly on that model). A profile with any missing value refuses to load.
+
+Keys (variant frame, metres; origin = rail-top contact plane at the bed front wall):
+`rail_top_z` (contact plane = rail-cap rib tops), `rail_cap_z` (flat cap between the ribs),
+`rail_inner_hw`, `rail_outer_hw_front`/`_rear` at `rail_outer_y_front`/`_rear` (outer edge of the
+flat cap; linear in between: the front-to-rear chord of a slightly concave edge, so it never
+overhangs it, max 9 mm inset mid-bed), `bed_inner_hw`, `bed_floor_z`, `bed_floor_rib_z`,
+`bed_inner_rear_y`, `wheelhouse_inner_hw`/`_top_z`/`_front_y`/`_rear_y`, `front_wall_inner_y`/
+`_outer_y`/`_top_z` (bed front wall and its top cap), `cab_back_y` + `cab_back_lean` (centreline,
+y = cab_back_y + lean * z), `cab_roof_z`, `bed_side_rear_y`, `tailgate_top_z`, `tailgate_face_y` +
+`tailgate_face_bow` (closed-gate outer face just under its top edge: parabola, centre most rearward,
+bow = how far forward it is at x = rail_inner_hw). Helpers: `rail_outer_hw_at(y)`,
+`rail_mid_hw_at(y)`, `tailgate_face_at(x)`, `cab_back_at(z)`, and `footprint(cab_gap, seal_min)` =
+where a full-bed hard camper sits (base height, front face, rear corners, half widths, rear bow),
+used by the shell, canopy and pop-top; `rear_bow_at(x, fp)`.
+
+`reference_glb` (2026-10-15, `scripts/measure_bed.py --write`; reference model, not the game truck):
+
+| quantity | measured | earlier single-ray value used by the variants |
+| --- | --- | --- |
+| rail-cap top (contact) / flat cap | 1.337 / 1.330 m above ground | 1.337 m (same) |
+| rail-cap outer width | 1.853 m at the front wall -> 1.748 m at y = -1.65 (bed narrows 5 cm per side) | 1.860 m, constant |
+| rail-cap inner lip / inner bed width | 1.592 m / 1.632 m | - / 1.632 m |
+| bed inside length | 1.659 m (front wall at +0.009, gate inner face at -1.650) | 1.650 m |
+| bed front wall top | +0.014 (2 cm above the flat cap), outer edge +0.050 | not measured (shell front at 0) |
+| cab back | +0.096 at rail height, leaning +0.037 m/m | +0.102 (one ray at z +0.15) |
+| closed tailgate outer face | -1.844 centre, -1.762 at x = 0.80 (bowed 8 cm) | -1.802 flat (one ray, centre, 12 cm down) |
+| bed sides rear end | -1.756 | - |
+| cab roof | 0.568 above the rail tops | 0.568 (same) |
+| wheel housings | inner x 0.552, top -0.368, y -0.27 .. -1.00 | - |
+
+What the earlier fit got wrong: shell full width (1.86 m) all the way back (the bed narrows to 1.75 m,
+so the rear corners hung 5-6 cm outside the bed sides), length to a flat -1.80 (past the tail-lamp
+corners at -1.74..-1.76 while short of the bowed gate centre), front at the bed's inner wall (10-11
+cm from the cab, the 2 cm higher bed front wall showing in the gap), and a cab-high roof measured from
+z = 0 with the shell bottom 7 mm above the flat cap.
+
+Checks: `scripts/check_fit.py --all` (BVH mesh-overlap + rail seat / side flush / cab gap / tailgate
+flush rays per pose, record in `logs/check_fit-*.json`); `scripts/measure_bed.py` re-measures, and the
+runner refuses to render when the active profile no longer matches the loaded reference model.
 
 ### Module (`scripts/variants/<module>.py`)
 
@@ -133,6 +187,8 @@ def build(cfg, collection, mats):
 
 - `cfg`: the variant JSON as a dict, plus
   - `cfg["camper"]`: your parameters;
+  - `cfg["bed"]`: the shared bed dimensions (`lib.bed.Bed`, see above). Fit every bed-mounted
+    footprint (rails, sides, cab gap, tailgate, floor, wheel housings) to this, not to `truck_info`;
   - `cfg["truck_info"]`: facts about the truck in the VARIANT frame (metres):
     `type`, `ground_z` (road height, negative), `roof_z` (cab roof top), `cab_back_y` (0.07),
     `front_y`, `front_axle_y`, `rear_axle_y`, `wheelbase`, `body_hw`, `track`, `tire_radius`,
@@ -153,7 +209,8 @@ def build(cfg, collection, mats):
 - **pickup**: origin = top of the bed rails, centred left/right, at the bed's front wall (same frame
   as the V1 shell and config/v1.json). The bed runs to y = -`bed_length`; the cab roof is at
   `roof_z` (~0.50 above the rails, 0.568 on the reference truck); the road is at `ground_z`
-  (~-1.44, -1.337 on the reference truck). Never hardcode these: read them from `truck_info`.
+  (~-1.44, -1.337 on the reference truck). Never hardcode these: read the bed from `cfg["bed"]` and
+  the rest (axles, tyres, ground) from `truck_info`.
 
 ## Shared helpers (reuse, do not copy)
 
@@ -217,28 +274,42 @@ auto-framed cameras (`place_camera`), render profiles (`configure_render`, compo
 
 ## Variant notes
 
-- `v1_shell` / `overland_canopy`: on the reference truck the shell is refitted for the render
-  (`fit_shell_cfg`: length to the tailgate face, rail-to-rail width, cab-high roof from
-  `truck_info`; `config/v1.json` is untouched). Render-only extras: seals, hatch hinge strip + lock
-  cylinders, base trim line above the rail seal, interior. The overland rack carries two rounded
-  cases, stacked recovery boards and a shovel.
-- `bed_rack`: generic overland bed rack (original profile, no maker names or logos). Tube frame on clamp
-  feet over the middle of each rail cap (x = mean of `bed_inner_hw` and `rail_outer_hw`), corner uprights
-  plus a mid post, MOLLE-style side panels with real through slots, top side rails and three crossbars
-  `top_below_roof` (0.02 m) under `roof_z`, so nothing reaches the cab (front uprights 3 cm behind the bed
-  front wall, 13 cm clear of the cab back on the reference truck). `loadout: full` adds a closed hard-shell
-  rooftop tent on brackets over the crossbars (overhangs the tailgate by ~0.12 m), a light bar above the
-  front crossbar, two recovery boards + a jerry can on the driver-side panel (the side the standard views
-  show), a packed awning above the driver-side rail, a jerry can + shovel on the passenger side and the
-  overland canopy's rotomoulded case on the bed floor (3 cm up, the floor is ribbed). `loadout: bare` is the
-  rack alone. Clearance against the truck mesh was checked with BVH overlap tests: no contacts.
-- `pop_top`: olive canvas, mesh zip windows, 0.13 m lid with a drip lip; the travel pose
-  (`camper.state: closed`) leaves `closed_gap` (3 cm) under the lid filled by the folded canvas,
-  with over-centre latches hooked to the lip.
-- `slide_in`: camper front wall 4 cm clear of the cab back, cabover floor 0.13 m above the cab roof,
-  nose at y = 1.30, wing walls 4.5 cm above the rails on rubber pads, basement floor 5 mm above the
-  measured bed floor; frame tie-down receivers + spring turnbuckles just ahead of and behind the
-  rear wheel opening.
+- `v1_shell` / `overland_canopy`: refitted for the render from the shared bed dimensions
+  (`fit_shell_cfg` -> `Bed.footprint`; `config/v1.json`, the export geometry, is untouched and still
+  exports byte-identical meshes): front face 4 cm behind the cab back (`camper.cab_gap`) and leaning
+  with it (negative `front_rake`), base 18 mm above the rail contact plane so the front wall clears
+  the raised bed front wall, a rail seal from the flat rail cap up into the skin (on the bed front wall
+  inboard of the rails), sides flush with the outer rail-cap edge and tapering with it
+  (`width_at_rails_rear`), rear corners on the closed tailgate face and the rear face bowed like the
+  tailgate (`rear_bow`, glass built from strips), roof cab-high. Render-only extras: seals, hatch hinge
+  strip + lock cylinders, base trim line, interior (inside the bed walls, on the floor ribs). The
+  overland rack (insets from the roof edges) carries two rounded cases, stacked recovery boards and
+  a shovel. Fit check: no rigid contact; seal 1 mm into the cap; sides 0 to 9 mm inside the rail edge;
+  cab gap 4.0 cm on the centreline (4-5 cm across the cab back, more at its rounded top corners);
+  rear within 1 cm of the tailgate face.
+- `bed_rack`: generic overland bed rack (original profile, no maker names or logos). Straight tube
+  side frames on clamp feet over the middle of the rail cap where it is narrowest (the rear), so the
+  7 cm feet stay on the cap from front to rear and rest on its ribs (0.5 mm); corner uprights plus a
+  mid post, MOLLE-style side panels with real through slots, top side rails and three crossbars
+  `top_below_roof` (0.02 m) under the cab roof (front uprights 3 cm behind the bed front wall). `loadout:
+  full` adds a closed hard-shell rooftop tent on brackets over the crossbars (rear flush with the
+  tailgate face, `tent_rear_overhang` 0; front `tent_front_gap` behind the bed front wall), a light bar
+  above the front crossbar, two recovery boards + a jerry can on the driver-side panel (the side the
+  standard views show), a packed awning above the driver-side rail, a jerry can + shovel on the
+  passenger side and the overland canopy's rotomoulded case on the floor ribs. `loadout: bare` is the
+  rack alone. No contact with the truck mesh (`check_fit.py`).
+- `pop_top`: footprint from `Bed.footprint` like the shell (front 4 cm behind the cab, sides flush
+  with the tapering rail caps, rear corners on the tailgate face, the rear end bent to the tailgate
+  bow, base above the bed front wall on a rail seal); olive canvas, mesh zip windows, 0.13 m lid with a
+  drip lip, 15 mm rear lid overhang; the travel pose (`camper.state: closed`) leaves `closed_gap` (3
+  cm) under the lid filled by the folded canvas, with over-centre latches hooked to the lip.
+- `slide_in`: camper front wall 4 cm clear of the cab back at the wing-wall floor (`camper.cab_gap`),
+  cabover floor 0.13 m above the cab roof, nose at y = 1.30, wing walls 4.5 cm above the rails on
+  rubber pads centred on the rail caps, rear overhang measured from the closed-gate line; stepped
+  basement (narrow between the wheel housings, full width above them inside the rail lips) on the
+  floor ribs, ending at the bed floor end (tailgate removed); frame tie-down receivers under the
+  frame + spring turnbuckles just ahead of and behind the rear wheel opening. The wing walls
+  intentionally overhang the bed sides (1.08 m half width), as on real units.
 
 Measured on the Surface Pro 8 (i7-1185G7, 2026-10-14, `--all`, 6 poses x 3 views, one Blender):
 `surface-photo` 116 to 156 s per 1280x720 view, 2394 s (~40 min) for all 18; `surface` (Eevee)

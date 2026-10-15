@@ -6,7 +6,9 @@ A variant module is scripts/variants/<module>.py exposing
 
     cfg        - the variant config (config/variants/<name>.json) as a dict, plus
                  cfg["truck_info"]: lib.proxy_truck.TruckInfo facts in the variant frame
-                 (no objects), and cfg["camper"]: the module's own parameters.
+                 (no objects), cfg["bed"]: the shared bed dimensions every bed-mounted
+                 footprint fits to (lib.bed.Bed, config/bed.json), and cfg["camper"]: the
+                 module's own parameters.
     collection - bpy collection to link every created object into.
     mats       - lib.materials.MaterialLibrary; mats["paint"] is the colour-matched body paint.
 

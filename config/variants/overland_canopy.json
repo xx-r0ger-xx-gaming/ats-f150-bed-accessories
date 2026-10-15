@@ -6,8 +6,8 @@
     "config": "config/v1.json",
     "paint_color": [0.008, 0.008, 0.009, 1.0],
     "rack_inset_x": 0.09,
-    "rack_front_y": -0.14,
-    "rack_rear_y": -1.60,
+    "rack_front_inset": 0.14,
+    "rack_rear_inset": 0.15,
     "rack_height": 0.11
   },
   "truck": {"type": "pickup", "source": "reference"},

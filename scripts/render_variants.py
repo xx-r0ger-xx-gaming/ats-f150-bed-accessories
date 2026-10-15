@@ -34,6 +34,7 @@ from lib.common import (  # noqa: E402
     REPO_ROOT, PipelineError, load_json, make_parser, repo_path, run_main, script_args, sha256_file,
     write_run_record,
 )
+from lib.bed import check_against_truck, load_bed  # noqa: E402
 from lib.contact_sheet import make_contact_sheet  # noqa: E402
 from lib.environment import (  # noqa: E402
     add_ground, configure_render, load_render_config, place_camera, resolve_profile, setup_world,
@@ -123,8 +124,8 @@ def new_collection(name):
     return col
 
 
-def stage_variant(name, rcfg, profile, sets=None):
-    """Fresh scene with truck + camper + environment. Returns (cfg, truck_info, camper objs, world)."""
+def stage_models(name, sets=None):
+    """Fresh scene with truck + camper only. Returns (cfg, truck_info, camper objs)."""
     bpy.ops.wm.read_factory_settings(use_empty=True)
     cfg = load_variant(name, sets)
     mats = MaterialLibrary(cfg["paint_spec"])
@@ -135,6 +136,12 @@ def stage_variant(name, rcfg, profile, sets=None):
                             f"{truck_types}, truck is {info['type']}")
     vcfg = dict(cfg)
     vcfg["truck_info"] = {k: v for k, v in info.items() if k != "objects"}
+    # the ONE set of bed dimensions every camper fits to (config/bed.json; see lib/bed.py)
+    bed = load_bed(vcfg["truck_info"], cfg.get("bed_profile"))
+    check_against_truck(bed, info)
+    print(f"[{name}] {bed.summary()}")
+    vcfg["bed"] = bed
+    info["bed"] = bed
     col = new_collection(f"camper_{name}")
     objs = build(vcfg, col, mats)
     if not isinstance(objs, (list, tuple)):
@@ -142,6 +149,12 @@ def stage_variant(name, rcfg, profile, sets=None):
     stray = [o.name for o in objs if col not in o.users_collection]
     if stray:
         raise PipelineError(f"variant {name}: objects not linked to the given collection: {stray[:5]}")
+    return cfg, info, list(objs)
+
+
+def stage_variant(name, rcfg, profile, sets=None):
+    """Fresh scene with truck + camper + environment. Returns (cfg, truck_info, camper objs, world)."""
+    cfg, info, objs = stage_models(name, sets)
     world = setup_world(rcfg["hdri"])
     add_ground(info["ground_z"], rcfg["ground"], new_collection("environment"))
     configure_render(profile)
@@ -189,7 +202,8 @@ def render_variant(name, rcfg, profile_name, views, save_blend=None, sets=None, 
     rec = write_run_record("render_variants", {
         "blender": bpy.app.version_string, "variant": name, "output_name": out_name, "suffix": suffix,
         "set": sets or {}, "profile": profile_name, "settings": profile,
-        "truck": {k: v for k, v in info.items() if k not in ("objects",)}, "build_seconds": build_s,
+        "truck": {k: v for k, v in info.items() if k not in ("objects", "bed")}, "bed": info.get("bed"),
+        "build_seconds": build_s,
         "scene_triangles": tris, "views": results,
     })
     print(f"[{out_name}] record {rec}")

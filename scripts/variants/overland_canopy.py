@@ -1,4 +1,4 @@
-"""Overland canopy: black cab-high V1 shell shape (smoked glass, seals, hatch hardware, interior) + low
+"""Overland canopy: black cab-high V1 shell shape (fitted to the shared bed dimensions like v1_shell) (smoked glass, seals, hatch hardware, interior) + low
 steel roof platform rack with two rounded hard cases, stacked recovery boards and a shovel."""
 from mathutils import Vector
 
@@ -18,8 +18,8 @@ DESCRIPTION = "Black overland canopy with roof rack platform and storage cases"
 
 def _rack(cp, fr, collection, mats):
     z0 = fr.H + fr.crown + 0.012          # rack frame sits on the roof crown via feet
-    xr = fr.side_x(fr.H) - cp["rack_inset_x"]
-    y0, y1 = cp["rack_front_y"], cp["rack_rear_y"]
+    xr = fr.side_x(fr.H) - cp["rack_inset_x"]          # narrowest (rear) roof width
+    y0, y1 = _rack_span(cp, fr)
     h = cp["rack_height"]
     p = Part("overland_rack", mats)
     s = 0.038
@@ -72,6 +72,12 @@ def _rack(cp, fr, collection, mats):
     return ob, zb + s + 0.012, xr
 
 
+def _rack_span(cp, fr):
+    """Rack front/rear y (shell frame): inset from the roof's front and rear edges."""
+    return (fr.front_y(fr.H) - cp.get("rack_front_inset", 0.14),
+            fr.rear_y(fr.H) + cp.get("rack_rear_inset", 0.15))
+
+
 def _case(name, cx, cy, zbase, lx, ly, lz, collection, mats):
     p = Part(name, mats)
     # rounded rotomoulded shell: generous radius, slightly narrower lid half
@@ -120,7 +126,7 @@ def _traction_boards(cx, cy, zbase, collection, mats):
 
 def build(cfg, collection, mats):
     cp = cfg["camper"]
-    shell_cfg = fit_shell_cfg(load_json(cp.get("config", "config/v1.json")), cfg["truck_info"])
+    shell_cfg = fit_shell_cfg(load_json(cp.get("config", "config/v1.json")), cfg["bed"], cp)
     black = mats.car_paint("oc_black_paint", cp["paint_color"], metallic=0.0, roughness=0.55,
                            clearcoat=0.0, clearcoat_roughness=0.3, flake=0.0)
     mats.add("steel_blk", mats.principled("oc_steel_blk", base_color=(0.012, 0.012, 0.013, 1.0),
@@ -135,13 +141,16 @@ def build(cfg, collection, mats):
         if "shell_body" in ob.name:
             add_weighted_normals(ob)
     fr = ShellFrame(shell_cfg)
+    offset = Vector(shell_cfg["origin"]["offset"])
     shell_materials(mats)
-    objs.append(shell_details(shell_cfg, fr, mats, collection, prefix="overland_canopy_"))
-    objs.append(shell_interior(shell_cfg, fr, mats, collection, cfg["truck_info"], prefix="overland_canopy_"))
+    extra = [shell_details(shell_cfg, fr, mats, collection, prefix="overland_canopy_"),
+             shell_interior(shell_cfg, fr, mats, collection, cfg["bed"], offset, prefix="overland_canopy_")]
     rack, zdeck, xr = _rack(cp, fr, collection, mats)
-    objs.append(rack)
-    y0, y1 = cp["rack_front_y"], cp["rack_rear_y"]
-    objs.append(_case("overland_case_big", -0.22, y0 - 0.42, zdeck, 0.78, 0.46, 0.26, collection, mats))
-    objs.append(_case("overland_case_small", -0.22, y1 + 0.34, zdeck, 0.62, 0.40, 0.20, collection, mats))
-    objs.append(_traction_boards(0.36, (y0 + y1) / 2, zdeck, collection, mats))
-    return objs
+    extra.append(rack)
+    y0, y1 = _rack_span(cp, fr)
+    extra.append(_case("overland_case_big", -0.22, y0 - 0.42, zdeck, 0.78, 0.46, 0.26, collection, mats))
+    extra.append(_case("overland_case_small", -0.22, y1 + 0.34, zdeck, 0.62, 0.40, 0.20, collection, mats))
+    extra.append(_traction_boards(0.36, (y0 + y1) / 2, zdeck, collection, mats))
+    for ob in extra:                       # everything above is built in the shell frame
+        ob.location = offset
+    return objs + extra
