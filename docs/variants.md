@@ -37,6 +37,8 @@ to `logs/render_variants-<timestamp>.json` (settings, camera, sun, seconds, outp
 
 Needs the HDRI: `powershell.exe -File scripts/fetch_tools.ps1` (CC0, sha256-checked, into
 `tools/hdri/`, gitignored). Rendering fails with a clear message if it is missing.
+The pickup variants also need the reference truck model, downloaded by hand (see
+`docs/gaming-pc-setup.md`, "Reference truck for preview renders").
 
 ## Adding a variant (two files, nothing else)
 
@@ -87,8 +89,42 @@ Defaults in `scripts/lib/proxy_truck.py` `DEFAULTS`. Most useful keys:
 | `dual_rear_wheels` | false | cab_chassis only: dual rear wheels, wider rear track. |
 | `tire_diameter`, `tire_width`, `rim_diameter`, `track`, `spokes`, `wheel_finish` | 0.82, 0.275, 0.508, 1.70, 6, `alloy_dark` | 20 in split-spoke alloys on all-terrain tyres. |
 
-The truck is original, generic and debadged (no logos, ovals or lettering) and is never exported.
-Reference renders of the bare bases: `--variant _ref_pickup`, `--variant _ref_cab_chassis`.
+The procedural truck is original, generic and debadged (no logos, ovals or lettering) and is never
+exported.
+
+#### Reference truck (`"source": "reference"`)
+
+`{"type": "pickup", "source": "reference"}` swaps the procedural pickup for a downloaded model
+(default `tools/reference-truck/2023_ford_f150_lihtning_platinum.glb`, CC BY 4.0, credited in the
+README; override with `truck.model`). It is used only for preview renders: gitignored, never
+exported or packaged. `v1_shell`, `overland_canopy`, `pop_top` and `slide_in` use it; `class_c`
+stays on the procedural `cab_chassis` (the model's meshes are merged by material, so the bed, rear
+axle and wheels cannot be cleanly separated or lengthened into a dual-wheel chassis cab).
+
+`build_reference_truck()` (in `proxy_truck.py`) imports the .glb with Blender's glTF importer, bakes
+the transforms, scales it to `overall_length` (5.89 m), turns it to face +Y, then:
+
+- **debadges**: deletes the badge materials (front oval insert, wheel-centre logos, replaced by plain
+  dark centre caps) and the oval ring
+  faces (`front_badge` box, chrome/black trim only), covers the oval recess with a plain satin-black
+  slat, presses the tailgate script panel (`flatten_objects`) onto a fitted surface with analytic
+  normals so no lettering is left, and swaps the licence-plate artwork for a blank plate;
+- **repaints**: the body paint material becomes `mats["paint"]` (the shared silver, so campers
+  colour-match); every other model material (all flat, roughness 1) is mapped onto the render
+  library (`material_map`: glass, trim, chrome/alloy, tyres, lamps);
+- **measures** with ray casts and returns the same `truck_info` contract: bed floor (`bed_floor_z`,
+  extra key), bed inner length/width, rail top (= mount), `rail_outer_hw`, cab roof, cab back,
+  tailgate outer face (`tailgate_y`), axles (from the brake discs), tyre radius, track. Measured on
+  the current file: rail 1.337 m, floor 0.776 m, roof 1.905 m, bed 1.650 x 1.632 m inside, wheelbase
+  3.70 m.
+- `tailgate`: `closed` or `removed` (deletes the gate faces between the bed sides); `down` is
+  procedural-only.
+
+Missing file: rendering stops with the download instructions (see `docs/gaming-pc-setup.md`). Drop
+`source` (or use `--set truck.source=procedural`) to render on the procedural pickup.
+
+Reference renders of the bare bases: `--variant _ref_pickup` (reference model),
+`--variant _ref_pickup_procedural`, `--variant _ref_cab_chassis`.
 
 ### Module (`scripts/variants/<module>.py`)
 
@@ -106,7 +142,9 @@ def build(cfg, collection, mats):
     `type`, `ground_z` (road height, negative), `roof_z` (cab roof top), `cab_back_y` (0.07),
     `front_y`, `front_axle_y`, `rear_axle_y`, `wheelbase`, `body_hw`, `track`, `tire_radius`,
     `spec` (resolved truck spec), `mount_local`;
-    pickup adds `rail_z` (0), `bed_length`, `bed_inner_hw`, `rail_outer_hw`, `tailgate_y` (bed end), `tailgate`;
+    pickup adds `rail_z` (0), `bed_length`, `bed_inner_hw`, `rail_outer_hw`, `tailgate_y` (bed end), `tailgate`
+    (the reference truck also gives `source`, `bed_floor_z`, `bed_inner_rear_y`, `axle_z`; use
+    `ti.get("bed_floor_z", -0.52)`);
     cab_chassis adds `frame_top_z` (0), `frame_hw`, `frame_end_y`, `rear_track` (outer tyre half width).
 - `collection`: link every object you create here (`collection.objects.link(ob)`); the runner
   rejects objects outside it.
@@ -120,7 +158,8 @@ def build(cfg, collection, mats):
 
 - **pickup**: origin = top of the bed rails, centred left/right, at the bed's front wall (same frame
   as the V1 shell and config/v1.json). The bed runs to y = -`bed_length`; the cab roof is at
-  `roof_z` (~0.50 above the rails); the road is at `ground_z` (~-1.44).
+  `roof_z` (~0.50 above the rails, 0.568 on the reference truck); the road is at `ground_z`
+  (~-1.44, -1.337 on the reference truck). Never hardcode these: read them from `truck_info`.
 - **cab_chassis**: origin = top of the frame rails, centred, 7 cm behind the cab back
   (`cab_back_y` = 0.07). The frame runs to `frame_end_y`; the road is at `ground_z` (~-0.80).
   A Class C body sits on the rails (z >= 0) from y = 0 rearward and may extend forward over the cab
@@ -147,9 +186,24 @@ tinted pane on a single face in front of a hollow interior), `glass_light`, `gla
 dark glazing for pocket floors on solids), `glass_clear`, `interior`, `trim` (satin black textured
 plastic), `trim_gloss`, `rubber`, `tire`, `chrome`, `alloy`, `alloy_dark`, `steel`, `lamp_red`
 (lit), `lamp_red_lens` (unlit), `lamp_amber`, `lamp_clear`, `led_white`, `reflector`, `plate`,
-`underbody`, `frame`, `bed_liner`, `decal_black`, `fabric`, `wood`, `plastic_white`.
-Factories: `mats.car_paint(name, base_color, ...)` (stripes, two-tone), `mats.principled(name, ...)`,
-`mats.thin_glass(name, tint)`, `mats.add(key, material)` (so `Part` can use it by key).
+`underbody`, `frame`, `bed_liner`, `decal_black`, `fabric`, `wood`, `plastic_white`,
+`glass_tint` (camper glazing: smoked ~13 % pane with a reflectance floor so the HDRI reads on it),
+`curtain` (pleated fabric for the back of a window pocket), `canvas` / `canvas_mesh` (tent canvas
+and zip-window mesh), `seal` (window/door rubber).
+Factories: `mats.car_paint(name, base_color, ...)` (stripes, two-tone; `clearcoat` > 0.05 adds a
+real sharp Fresnel coat layer over the base, flakes vary the base roughness), `mats.principled(name, ...)`,
+`mats.thin_glass(name, tint)`, `mats.canvas_material(name, color, wrinkle)`, `mats.add(key, material)`
+(so `Part` can use it by key).
+
+Camper windows (all variants): a pocket ~0.16-0.20 m deep is cut behind each opening (`interior`
+walls, `curtain` back), a single-face `glass_tint` pane sits 12-14 mm under the skin, with a proud
+`seal` lip and a frame. On the hollow V1/overland shells the pane is in front of a simple interior
+(headliner, drawer base + sleeping platform, a duffel and a cooler). Eevee shows the interior much
+brighter than Cycles (hashed shadows let more sun through the pane); judge glass in Cycles.
+
+Shared paint (`config/v1.json#materials.shell_paint`): render-only keys `flake` 0.6, `dirt` 0.15 and
+`render_roughness` 0.17 (base-coat roughness for renders; `roughness` 0.36 still feeds
+`build_scene.py`).
 
 `scripts/lib/environment.py`: HDRI world + sun (`setup_world`), road/ground (`add_ground`),
 auto-framed cameras (`place_camera`), render profiles (`configure_render`, compositor finishing).
@@ -173,6 +227,26 @@ auto-framed cameras (`place_camera`), render profiles (`configure_render`, compo
 - `class_c` puts the entry door + awning on the passenger/curb side (`camper.door_side: 1`) and
   mirrors its `front34` camera to the right-front so the hero view shows the door side.
 
+## Variant notes
+
+- `v1_shell` / `overland_canopy`: on the reference truck the shell is refitted for the render
+  (`fit_shell_cfg`: length to the tailgate face, rail-to-rail width, cab-high roof from
+  `truck_info`; `config/v1.json` is untouched). Render-only extras: seals, hatch hinge strip + lock
+  cylinders, base trim line above the rail seal, interior. The overland rack carries two rounded
+  cases, stacked recovery boards and a shovel.
+- `pop_top`: olive canvas, mesh zip windows, 0.13 m lid with a drip lip; the travel pose
+  (`camper.state: closed`) leaves `closed_gap` (3 cm) under the lid filled by the folded canvas,
+  with over-centre latches hooked to the lip.
+- `slide_in`: camper front wall 4 cm clear of the cab back, cabover floor 0.13 m above the cab roof,
+  nose at y = 1.30, wing walls 4.5 cm above the rails on rubber pads, basement floor 5 mm above the
+  measured bed floor; frame tie-down receivers + spring turnbuckles just ahead of and behind the
+  rear wheel opening.
+- `class_c`: windows are cut into both body halves (pocket + pane + frame + seal), decals are
+  trimmed by the same cutter, entry door has a paddle handle, hinges and a two-tread folding step;
+  the wraparound cabover glass has an eyebrow and a sill for depth. Procedural cab_chassis only.
+
 Measured on the Surface Pro 8 (i7-1185G7, 2026-10-14, `--all`, 6 poses x 3 views, one Blender):
 `surface-photo` 116 to 156 s per 1280x720 view, 2394 s (~40 min) for all 18; `surface` (Eevee)
 10 to 13 s per view, ~3.7 min for all 18. Per-view seconds are in the `render_variants` log records.
+After the reference-truck switch (2026-10-15): `surface-photo` 68 to 103 s per view on the
+reference truck (490k faces; import + measure adds ~15 s per pose), 150 to 161 s for `class_c`.

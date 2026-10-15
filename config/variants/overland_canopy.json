@@ -10,7 +10,7 @@
     "rack_rear_y": -1.60,
     "rack_height": 0.11
   },
-  "truck": {"type": "pickup"},
+  "truck": {"type": "pickup", "source": "reference"},
   "paint": "config/v1.json#materials.shell_paint",
   "views": ["rear34", "side", "front34"],
   "cameras": {}

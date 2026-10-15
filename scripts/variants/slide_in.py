@@ -69,10 +69,10 @@ class Geo:
         c, ti = cfg["camper"], cfg["truck_info"]
         self.hw = c.get("half_width", 1.08)
         self.yr = ti["tailgate_y"] - c.get("rear_overhang", 0.50)
-        self.z0 = 0.03
+        self.z0 = 0.045                        # wing-wall floor: visible gap above the bed rails
         self.ztop = c.get("roof_above_rails", 1.52)
         self.zc = ti["roof_z"] + c.get("cabover_floor_above_cab_roof", 0.11)
-        self.yb = ti["cab_back_y"] + 0.03
+        self.yb = ti["cab_back_y"] - 0.04            # camper front wall: 4 cm clear of the cab back
         self.yn = c.get("cabover_nose_y", 1.40)
         # front face of the nose: from (yn - 0.04, zc + 0.15) to (yn, zc + 0.55)
         self.ff0 = (self.yn - 0.06, self.zc + 0.18)
@@ -140,6 +140,7 @@ def setup_materials(cfg, mats):
                                           roughness=0.45, specular=0.3))
     mats.add("sl_frame", mats.principled("rv_slide_in_frame", base_color=(0.018, 0.018, 0.02, 1.0),
                                          roughness=0.42, metallic=0.25))
+    mats.add("sl_under", mats.principled("rv_slide_in_under", base_color=(0.11, 0.11, 0.105, 1.0), roughness=0.7))
     mats.add("sl_acwhite", mats.principled("rv_slide_in_ac", base_color=(0.70, 0.70, 0.68, 1.0),
                                            roughness=0.38, clearcoat=0.2))
 
@@ -160,6 +161,8 @@ def window_list(g):
     return wins
 
 
+POCKET = 0.20                                   # window pocket depth (interior box behind the glass)
+GLASS_D = -0.012                                 # glass pane depth below the skin
 DOOR = (-0.78, -0.16, 0.12, 1.38, 0.06)          # rear entry door (u = x, v = z)
 HATCH = (-1.92, -1.47, 0.12, 0.38, 0.035)        # left side storage hatch (u = y, v = z)
 
@@ -183,15 +186,15 @@ def build_body(g, mats, col):
     bevel(bm, cap_edges, 0.065, 3)
     bm.normal_update()
     under = [f for f in bm.faces if f.normal.z < -0.55]
-    p.set_mat(under, "underbody")
+    p.set_mat(under, "sl_under")
     body = p.finish(col, smooth=35)
 
     # cutters: window pockets (glass floor) + door / hatch panel-gap grooves
     cbm = bmesh.new()
     for mapper, ol, _ in window_list(g):
-        faces = build_prism(cbm, ring(mapper, ol, 0.08), ring(mapper, ol, -0.03), mat_index=1)
+        faces = build_prism(cbm, ring(mapper, ol, 0.08), ring(mapper, ol, -POCKET), mat_index=2)
         bmesh.ops.recalc_face_normals(cbm, faces=faces)
-        faces[0].material_index = 1
+        faces[0].material_index = 2
         faces[1].material_index = 0
     gap = 0.006
     for mapper, (u0, u1, v0, v1, r) in ((g.rear(), DOOR), (g.side(-1), HATCH)):
@@ -199,7 +202,7 @@ def build_body(g, mats, col):
         i = offset_rect(u0, u1, v0, v1, r, -gap)
         annulus_prism(cbm, ring(mapper, o, 0.05), ring(mapper, o, -0.018),
                       ring(mapper, i, 0.05), ring(mapper, i, -0.018), 1)
-    cutter = bm_object(f"{NAME}_cut", cbm, [mats["glass_flush"], mats["sl_frame"]], col)
+    cutter = bm_object(f"{NAME}_cut", cbm, [mats["curtain"], mats["sl_frame"], mats["interior"]], col)
     boolean_apply(body, cutter)
     finish_hard_surface(body, 35)
 
@@ -209,12 +212,14 @@ def build_body(g, mats, col):
     bp = Part(f"{NAME}_basement", mats)
     ti = g.ti
     bhw = min(ti["bed_inner_hw"] - 0.04, 0.80)
+    BED_FLOOR = ti.get("bed_floor_z", -0.52) + 0.005       # basement floor 5 mm above the bed floor
+    ybf = min(yb - 0.02, -0.012)                             # basement front: clear of the bed front wall
     if ti.get("tailgate", "closed") == "closed":
-        box(bp, (-bhw, ti["tailgate_y"] + 0.07, -0.50), (bhw, yb - 0.02, z0 + 0.02), "underbody", bev=0.02)
+        box(bp, (-bhw, ti["tailgate_y"] + 0.07, BED_FLOOR), (bhw, ybf, z0 + 0.02), "underbody", bev=0.02)
     else:
         ye = ti["tailgate_y"] - 0.02
-        box(bp, (-bhw, ye, -0.50), (bhw, yb - 0.02, z0 + 0.02), "sl_gel", bev=0.02)
-        box(bp, (-bhw + 0.01, ye - 0.035, -0.505), (bhw - 0.01, ye + 0.02, -0.44), "rubber", bev=0.008)
+        box(bp, (-bhw, ye, BED_FLOOR), (bhw, ybf, z0 + 0.02), "sl_gel", bev=0.02)
+        box(bp, (-bhw + 0.01, ye - 0.035, BED_FLOOR), (bhw - 0.01, ye + 0.02, BED_FLOOR + 0.06), "rubber", bev=0.008)
         box(bp, (-bhw + 0.01, ye - 0.006, -0.20), (bhw - 0.01, ye + 0.01, -0.17), "sl_stripe")
         for sgn in (-1, 1):              # basement tail/marker lamps low on the rear face
             a_, b_ = sorted((sgn * (bhw - 0.06), sgn * (bhw - 0.16)))
@@ -263,6 +268,15 @@ def windows_trim(g, p):
         outer = offset_rect(u0, u1, v0, v1, 0.05, 0.035)
         inner = offset_rect(u0, u1, v0, v1, 0.05, -0.004)
         frame(p, mapper, inner, outer, -0.004, 0.014, "sl_frame")
+        # smoked glass pane (single face) in front of the interior pocket + rubber seal lip
+        bm = p.bm
+        pane = bm.faces.new([bm.verts.new(q) for q in ring(mapper, ol, GLASS_D)])
+        pane.normal_update()
+        u_, v_ = ol[0]
+        if pane.normal.dot(mapper(u_, v_, 1.0) - mapper(u_, v_, 0.0)) < 0:
+            pane.normal_flip()
+        p.set_mat([pane], "glass_tint")
+        frame(p, mapper, offset_rect(u0, u1, v0, v1, 0.05, -0.012), inner, GLASS_D - 0.004, 0.002, "seal")
         if mull is not None:
             plate(p, mapper, [(mull - 0.012, v0), (mull + 0.012, v0), (mull + 0.012, v1), (mull - 0.012, v1)],
                   -0.03, 0.008, "sl_frame")
@@ -413,6 +427,39 @@ def jacks(g, p):
                     "sl_frame")
 
 
+def tie_downs(g, p):
+    """Frame-mounted tie-down receivers under the bed sides + spring-loaded turnbuckles up to the
+    camper's corner brackets (front pair just behind the cab, rear pair behind the rear wheels);
+    rubber pads on the bed rails under the wing walls."""
+    ti = g.ti
+    zr = ti["bed_floor_z"] if "bed_floor_z" in ti else -0.52
+    zrx = -0.80                                        # receiver tube, just under the bed sides
+    xo = g.hw - 0.035                                  # bracket / turnbuckle line (outside the bed side)
+    arch = ti["tire_radius"] + 0.17                       # clear of the rear wheel opening + flare
+    for yc in (min(ti["rear_axle_y"] + arch, g.yb - 0.20), ti["rear_axle_y"] - arch):
+        for sgn in (-1, 1):
+            xa, xb = sorted((sgn * 0.56, sgn * (xo + 0.04)))
+            box(p, (xa, yc - 0.035, zrx - 0.035), (xb, yc + 0.035, zrx + 0.035), "sl_frame", bev=0.006)
+            xc = sgn * xo
+            box(p, (xc - 0.03, yc - 0.03, zrx + 0.03), (xc + 0.03, yc + 0.03, zrx + 0.07), "sl_frame", bev=0.006)
+            # camper bracket under the wing wall
+            box(p, (xc - 0.035, yc - 0.045, g.z0 - 0.05), (xc + 0.035, yc + 0.045, g.z0 + 0.002), "sl_frame", bev=0.006)
+            # rod - spring body - rod
+            z0_, z1_ = zrx + 0.07, g.z0 - 0.05
+            cylinder_z(p, xc, yc, 0.009, z0_, z1_, "chrome", seg=10)
+            zm = (z0_ + z1_) / 2
+            cylinder_z(p, xc, yc, 0.026, zm - 0.16, zm + 0.10, "lamp_red_lens", seg=14)   # red spring sleeve
+            cylinder_z(p, xc, yc, 0.018, zm + 0.10, zm + 0.17, "steel", seg=12)
+            cylinder_z(p, xc, yc, 0.02, zm - 0.20, zm - 0.16, "steel", seg=12)
+    # rubber pads between the wing walls and the bed rails
+    xr = ti["rail_outer_hw"] - 0.05
+    n = 5
+    for k in range(n):
+        y = -0.15 - k * (ti["bed_length"] - 0.30) / (n - 1)
+        for sgn in (-1, 1):
+            box(p, (sgn * xr - 0.035, y - 0.06, 0.0), (sgn * xr + 0.035, y + 0.06, g.z0 + 0.002), "rubber", bev=0.004)
+
+
 def build(cfg, collection, mats):
     setup_materials(cfg, mats)
     g = Geo(cfg)
@@ -425,6 +472,7 @@ def build(cfg, collection, mats):
     front_details(g, p)
     roof(g, p)
     jacks(g, p)
+    tie_downs(g, p)
     objs.append(p.finish(collection, smooth=35))
     tris = sum(len(pl.vertices) - 2 for o in objs for pl in o.data.polygons)
     print(f"[{NAME}] camper triangles: {tris}")

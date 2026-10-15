@@ -80,7 +80,7 @@ class TruckInfo(dict):
 
 def make_spec(overrides=None):
     s = dict(DEFAULTS)
-    s.update({k: v for k, v in (overrides or {}).items() if not k.startswith("_")})
+    s.update({k: v for k, v in (overrides or {}).items() if not k.startswith("_") and k not in ("source", "model")})
     if s["type"] not in ("pickup", "cab_chassis"):
         raise ValueError(f"truck type must be pickup|cab_chassis, got {s['type']}")
     if s["frame_top_z"] is None:
@@ -894,10 +894,14 @@ def build_truck(spec, mats, collection=None):
     Returns TruckInfo (variant frame). All truck objects are linked to `collection` (created as
     'preview_context' if None) and moved so the mount point is at the world origin.
     """
-    s = make_spec(spec)
     if collection is None:
         collection = bpy.data.collections.new(COLLECTION)
         bpy.context.scene.collection.children.link(collection)
+    if (spec or {}).get("source", "procedural") == "reference":
+        return build_reference_truck(spec, mats, collection)
+    if (spec or {}).get("source", "procedural") != "procedural":
+        raise ValueError(f"truck source must be procedural|reference, got {spec.get('source')}")
+    s = make_spec(spec)
     g = Geo(s)
     mats.ground_z = -(s["rail_z"] if g.pickup else s["frame_top_z"])   # world z of the road (dirt)
     mats.add("grille", _grille_material(mats))
@@ -975,3 +979,304 @@ def _grille_material(mats):
     b.inputs["Metallic"].default_value = 0.6
     b.inputs["Roughness"].default_value = 0.3
     return mat
+
+
+# ------------------------------------------------------------------ reference truck (downloaded model)
+#
+# Opt-in truck source for preview renders: truck {"type": "pickup", "source": "reference"}.
+# A third-party CC BY 4.0 model (see README "Credits"), downloaded by hand into tools/ (gitignored).
+# Imported with Blender's glTF importer, debadged, repainted with mats["paint"], normalised into the
+# truck-local frame and MEASURED (bed floor, bed inner length/width, rail top, cab roof, axles) by
+# ray casts, so the returned TruckInfo is the same contract the procedural pickup provides.
+# Render-only: never exported, never packaged.
+
+REFERENCE_MODEL = "tools/reference-truck/2023_ford_f150_lihtning_platinum.glb"
+REFERENCE_DEFAULTS = {
+    "model": REFERENCE_MODEL,
+    "overall_length": 5.89,           # metres, bumper to bumper (model units are arbitrary)
+    # material-name suffixes on the model (the file merges meshes by material, so whole objects
+    # are not parts; we act per material and per face)
+    "paint_materials": ["Iced_Blue_Silver"],
+    "badge_materials": ["07___Default777", "logo2"],     # front oval, wheel-centre caps
+    "plate_materials": ["Philippine_License_Plate_Recovered"],
+    # every other model material is flat roughness-1 colour: map them all onto the render library
+    "material_map": {"Glass1": "glass_light", "Windows": "glass", "glasss_dark": "glass_flush",
+                     "Black1": "trim", "black": "trim", "BlackMetal": "frame", "BlackTrims1": "trim_gloss",
+                     "Callipers": "alloy_dark", "ChromeTrims": "alloy", "Iron_Clean_Distorted": "steel",
+                     "mirror": "chrome", "Orange": "lamp_amber", "Red_Light": "lamp_red_lens",
+                     "refl_black": "trim_gloss", "WhiteDRLs": "lamp_clear", "Tires": "tire"},
+    # glTF node holding the tailgate panel with the embossed model script: its vertices are pressed
+    # flat onto a least-squares surface fitted to the panel, which erases the raised letters
+    "flatten_objects": ["Object_154"],
+    # front oval ring left after the badge material is gone (truck-local metres, ground z = 0,
+    # x centred; y measured back from the front-most point)
+    "front_badge": {"half_x": 0.175, "z": [0.89, 1.10], "depth": 0.12,
+                    "materials": ["ChromeTrims", "BlackTrims1"]},
+    # extra badge/lettering faces removed by region (truck-local metres after normalisation, before
+    # the mount shift: x centred, ground z = 0, +Y forward, y = 0 at the bed front wall).
+    "badge_boxes": [],
+}
+
+
+def _mat_suffix(mat, suffixes):
+    return mat is not None and any(mat.name.endswith(s) for s in suffixes)
+
+
+def _import_reference(path, collection):
+    from lib.common import PipelineError
+    before = set(bpy.data.objects)
+    res = bpy.ops.import_scene.gltf(filepath=str(path))
+    if "FINISHED" not in res:
+        raise PipelineError(f"glTF import failed for {path}: {res}")
+    new = [o for o in bpy.data.objects if o not in before]
+    meshes = []
+    for ob in new:
+        for c in list(ob.users_collection):
+            c.objects.unlink(ob)
+        if ob.type != "MESH":
+            continue
+        if ob.data.users > 1:
+            ob.data = ob.data.copy()
+        mw = ob.matrix_world.copy()
+        ob.parent = None
+        ob.data.transform(mw)
+        ob.matrix_world.identity()
+        collection.objects.link(ob)
+        meshes.append(ob)
+    for ob in new:
+        if ob.type != "MESH":
+            bpy.data.objects.remove(ob)
+    if not meshes:
+        raise PipelineError(f"{path}: no meshes imported")
+    return meshes
+
+
+def _verts_world(objs, pred=None):
+    out = []
+    for ob in objs:
+        if pred is not None and not pred(ob):
+            continue
+        out += [v.co.copy() for v in ob.data.vertices]
+    return out
+
+
+def _ray(scene, dg, origin, direction, dist=20.0):
+    hit, loc, nrm, idx, ob, _ = scene.ray_cast(dg, Vector(origin), Vector(direction).normalized(), distance=dist)
+    return loc if hit else None
+
+
+def _flatten_panel(ob):
+    """Press a gently curved panel's vertices onto its own least-squares quadric y(x, z) (two passes,
+    the second ignoring outliers such as raised lettering)."""
+    import numpy as np
+    n = len(ob.data.vertices)
+    co = np.empty(n * 3)
+    ob.data.vertices.foreach_get("co", co)
+    co = co.reshape(n, 3)
+    x, y, z = co[:, 0], co[:, 1], co[:, 2]
+    A = np.stack([np.ones(n), x, z, x * x, z * z, x * z], axis=1)
+    keep = np.ones(n, bool)
+    for _ in range(3):
+        coef, *_ = np.linalg.lstsq(A[keep], y[keep], rcond=None)
+        res = y - A @ coef
+        keep = np.abs(res) < max(np.percentile(np.abs(res), 60), 1e-6) * 1.5
+    co[:, 1] = A @ coef
+    ob.data.vertices.foreach_set("co", co.ravel())
+    ob.data.update()
+    # exact surface normals (the flattened letters would otherwise still shade through)
+    dydx = coef[1] + 2 * coef[3] * x + coef[5] * z
+    dydz = coef[2] + 2 * coef[4] * z + coef[5] * x
+    nrm = np.stack([-dydx, np.ones(n), -dydz], axis=1)
+    nrm /= np.linalg.norm(nrm, axis=1)[:, None]
+    me = ob.data
+    for p in me.polygons:
+        p.use_smooth = True
+    me.use_auto_smooth = True
+    me.normals_split_custom_set_from_vertices([tuple(v) for v in nrm])
+    ob["keep_custom_normals"] = True
+
+
+def _delete_faces(ob, pred):
+    """Delete faces whose material index / centre match pred(face_material, centre)."""
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    mats_ = [s.material for s in ob.material_slots]
+    dead = [f for f in bm.faces
+            if pred(mats_[f.material_index] if f.material_index < len(mats_) else None, f.calc_center_median())]
+    if dead:
+        bmesh.ops.delete(bm, geom=dead, context="FACES")
+        bm.to_mesh(ob.data)
+    bm.free()
+    return len(dead)
+
+
+def build_reference_truck(spec, mats, collection):
+    """Import + normalise + measure the reference pickup. Returns TruckInfo (variant frame)."""
+    from mathutils import Matrix
+
+    from lib.common import PipelineError, repo_path
+    s = dict(REFERENCE_DEFAULTS)
+    s.update({k: v for k, v in spec.items() if not k.startswith("_")})
+    s["type"] = "pickup"
+    if s.get("tailgate", "closed") not in ("closed", "removed"):
+        raise PipelineError("reference truck: tailgate must be closed|removed")
+    s.setdefault("tailgate", "closed")
+    path = repo_path(s["model"])
+    if not path.is_file():
+        raise PipelineError(
+            f"reference truck model missing: {path}\n  Download '2023 Ford F150 Lihtning Platinum' (CC BY 4.0, "
+            f"https://skfb.ly/pFtDT) from Sketchfab as glTF binary (.glb) into tools/reference-truck/ "
+            f"(see docs/gaming-pc-setup.md), or use the procedural truck (drop truck.source).")
+    objs = _import_reference(path, collection)
+    for ob in objs:
+        if ob.name in s["flatten_objects"]:
+            _flatten_panel(ob)
+
+    # ---- normalise: centre x, front toward +Y (model front is at its -Y end), metres, ground z = 0
+    vs = _verts_world(objs)
+    lo = Vector(tuple(min(v[i] for v in vs) for i in range(3)))
+    hi = Vector(tuple(max(v[i] for v in vs) for i in range(3)))
+    k = s["overall_length"] / (hi.y - lo.y)
+    cx = (lo.x + hi.x) / 2
+    M = (Matrix.Scale(k, 4) @ Matrix.Rotation(math.pi, 4, "Z")
+         @ Matrix.Translation((-cx, -(lo.y + hi.y) / 2, -lo.z)))
+    for ob in objs:
+        ob.data.transform(M)
+        ob.data.update()
+
+    # ---- debadge: badge materials, the front oval ring, licence-plate artwork (material swap below)
+    removed = 0
+    fb = s["front_badge"]
+    # plain centre caps replace the wheel-centre logos (same place and size, no emblem)
+    logo = _verts_world(objs, lambda o: any(_mat_suffix(m.material, ["logo2"]) for m in o.material_slots))
+    caps = Part("pv_ref_center_caps", mats)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            cl = [v for v in logo if v.x * sx > 0.3 and v.y * sy > 0.3]
+            if len(cl) < 8:
+                continue
+            cy = (min(v.y for v in cl) + max(v.y for v in cl)) / 2
+            cz = (min(v.z for v in cl) + max(v.z for v in cl)) / 2
+            r = (max(v.z for v in cl) - min(v.z for v in cl)) / 2
+            xo = max(abs(v.x) for v in cl)
+            cylinder_x(caps, cy, cz, r * 0.98, sx * (xo - 0.03), sx * (xo - 0.002), "alloy_dark", seg=24)
+    if caps.bm.verts:
+        objs.append(caps.finish(collection, smooth=40))
+    ytip = max(v.y for v in _verts_world(objs))
+    for ob in objs:
+        removed += _delete_faces(ob, lambda m, c: _mat_suffix(m, s["badge_materials"]) or (
+            abs(c.x) < fb["half_x"] and fb["z"][0] < c.z < fb["z"][1] and c.y > ytip - fb["depth"]
+            and _mat_suffix(m, fb["materials"])))
+    # badge-delete bar: a plain satin-black slat across the grille centre hides the oval recess
+    bar = Part("pv_ref_badge_delete", mats)
+    zc = (fb["z"][0] + fb["z"][1]) / 2
+    box(bar, (-fb["half_x"], ytip - 0.10, zc - 0.078), (fb["half_x"], ytip - 0.046, zc + 0.078), "trim_gloss",
+        bev=0.012)
+    objs.append(bar.finish(collection, smooth=40))
+    keep = []
+    for ob in objs:
+        if len(ob.data.polygons) == 0:
+            me = ob.data
+            bpy.data.objects.remove(ob)
+            bpy.data.meshes.remove(me)
+        else:
+            keep.append(ob)
+    objs = keep
+
+    # ---- measure (ray casts on the normalised model, before the mount shift)
+    bpy.context.view_layer.update()
+    scene = bpy.context.scene
+    dg = bpy.context.evaluated_depsgraph_get()
+    rot = _verts_world(objs, lambda o: any(_mat_suffix(m.material, ["Iron_Clean_Distorted"]) for m in o.material_slots))
+    if not rot:
+        raise PipelineError("reference truck: brake discs (axle locator) not found")
+    ymid = sum(v.y for v in rot) / len(rot)
+    axles = []
+    for side in (lambda v: v.y < ymid, lambda v: v.y >= ymid):
+        c = [v for v in rot if side(v)]
+        axles.append(((min(v.y for v in c) + max(v.y for v in c)) / 2, (min(v.z for v in c) + max(v.z for v in c)) / 2))
+    (y_ra, z_ax), (y_fa, _) = axles
+    tires = _verts_world(objs, lambda o: any(_mat_suffix(m.material, ["Tires"]) for m in o.material_slots))
+    rear_t = [v for v in tires if abs(v.y - y_ra) < 0.6]
+    tire_r = (max(v.z for v in rear_t) - min(v.z for v in rear_t)) / 2
+    xs_r = [v.x for v in rear_t if v.x > 0]
+    track = (max(xs_r) + min(xs_r)) if xs_r else 1.70
+
+    def down(x, y):
+        h = _ray(scene, dg, (x, y, 5.0), (0, 0, -1))
+        return h.z if h is not None else 0.0
+
+    zf0 = down(0.0, y_ra)
+    step = 0.01
+    yb_f = y_ra
+    while down(0.0, yb_f + step) < zf0 + 0.08:
+        yb_f += step
+    yb_r = y_ra
+    while down(0.0, yb_r - step) < zf0 + 0.08:
+        yb_r -= step
+    floor = sorted(down(0.0, yb_r + (yb_f - yb_r) * i / 20) for i in range(1, 20))[10]
+    yw = yb_f - 0.15
+    h = _ray(scene, dg, (0.0, yw, floor + 0.25), (1, 0, 0))
+    hl = _ray(scene, dg, (0.0, yw, floor + 0.25), (-1, 0, 0))
+    if h is None or hl is None:
+        raise PipelineError("reference truck: bed side walls not found")
+    inner_hw = (h.x - hl.x) / 2
+    xc = (h.x + hl.x) / 2
+    ys = yb_f - 0.35
+    prof = [(x / 1000, down(xc + x / 1000, ys)) for x in range(int(inner_hw * 1000) - 10, int(inner_hw * 1000) + 300, 4)]
+    rail = max(z for _, z in prof)
+    outer = max(x for x, z in prof if z > rail - 0.03)
+    roof = max(down(0.0, yb_f + 0.1 + 0.05 * i) for i in range(60))
+    hc = _ray(scene, dg, (0.0, yb_f - 0.3, rail + 0.15), (0, 1, 0))
+    cab_back = (hc.y - yb_f) if hc is not None else 0.07
+    ht = _ray(scene, dg, (0.0, yb_r - 2.0, rail - 0.12), (0, 1, 0))
+    tail_out = ht.y if ht is not None else yb_r - 0.06
+
+    # ---- optional: remove the tailgate (faces of the gate box behind the bed floor)
+    if s["tailgate"] == "removed":
+        for ob in objs:
+            removed += _delete_faces(ob, lambda m, c: (abs(c.x - xc) < inner_hw + 0.02 and tail_out - 0.02 < c.y < yb_r + 0.005
+                                                       and floor + 0.025 < c.z < rail + 0.05))
+    for bx in s.get("badge_boxes", []):
+        lo_b, hi_b = Vector(bx[0]), Vector(bx[1])
+        for ob in objs:
+            removed += _delete_faces(ob, lambda m, c: all(lo_b[i] + (yb_f if i == 1 else 0) <= c[i] <= hi_b[i] + (yb_f if i == 1 else 0)
+                                                          for i in range(3)))
+
+    # ---- shift: y = 0 at the bed front wall (inner face), mount = rail top
+    mount_z = rail
+    shift = Matrix.Translation((-xc, -yb_f, 0.0))
+    for ob in objs:
+        ob.data.transform(shift)
+        ob.location.z -= mount_z
+    mats.ground_z = -mount_z
+
+    # ---- materials: shared paint, our glass, blank plates
+    for ob in objs:
+        for slot in ob.material_slots:
+            m = slot.material
+            if _mat_suffix(m, s["paint_materials"]):
+                slot.material = mats["paint"]
+            elif _mat_suffix(m, s["plate_materials"]):
+                slot.material = mats["plate"]
+            else:
+                for suf, key in s["material_map"].items():
+                    if m is not None and m.name.endswith("_" + suf):
+                        slot.material = mats[key]
+        for p in ob.data.polygons:
+            p.use_smooth = True
+    info = TruckInfo(
+        type="pickup", source="reference", mount_local=[0.0, 0.0, mount_z], ground_z=-mount_z,
+        roof_z=roof - mount_z, cab_back_y=cab_back, front_y=max(v.y for v in _verts_world(objs)),
+        front_axle_y=y_fa - yb_f, rear_axle_y=y_ra - yb_f, wheelbase=y_fa - y_ra, body_hw=outer + 0.03,
+        track=track, tire_radius=tire_r, spec=s,
+        rail_z=0.0, bed_length=yb_f - tail_out, bed_inner_hw=inner_hw, rail_outer_hw=outer,
+        tailgate_y=tail_out - yb_f, tailgate=s["tailgate"], bed_floor_z=floor - mount_z,
+        bed_inner_rear_y=yb_r - yb_f, axle_z=z_ax - mount_z,
+    )
+    info["objects"] = objs
+    print(f"[reference truck] {path.name}: scale {k:.5f}, {sum(len(o.data.polygons) for o in objs)} faces, "
+          f"removed {removed} badge/gate faces; bed floor {floor:.3f} rail {rail:.3f} roof {roof:.3f} "
+          f"bed {yb_f - yb_r:.3f} (inner) x {2 * inner_hw:.3f}, rail outer hw {outer:.3f}, "
+          f"axles f {y_fa - yb_f:.3f} r {y_ra - yb_f:.3f}, tire r {tire_r:.3f}, cab back {cab_back:.3f}")
+    return info

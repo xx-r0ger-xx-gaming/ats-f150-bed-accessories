@@ -1,10 +1,12 @@
-"""Overland canopy: black cab-high V1 shell shape + low steel roof platform rack + two hard cases."""
+"""Overland canopy: black cab-high V1 shell shape (smoked glass, seals, hatch hardware, interior) + low
+steel roof platform rack with two rounded hard cases, stacked recovery boards and a shovel."""
 from mathutils import Vector
 
 from lib.common import load_json
 from lib.meshkit import Part, add_weighted_normals
 from lib.meshkit import box as _box
 from lib.shell_v1 import ShellFrame, build_shell
+from variants.v1_shell import fit_shell_cfg, shell_details, shell_interior, shell_materials
 
 def box(p, lo, hi, key, bev=0.0, seg=1):
     return _box(p, lo, hi, key, bev, seg)
@@ -72,7 +74,10 @@ def _rack(cp, fr, collection, mats):
 
 def _case(name, cx, cy, zbase, lx, ly, lz, collection, mats):
     p = Part(name, mats)
-    box(p, (cx - lx / 2, cy - ly / 2, zbase), (cx + lx / 2, cy + ly / 2, zbase + lz), "case", 0.025, 2)
+    # rounded rotomoulded shell: generous radius, slightly narrower lid half
+    box(p, (cx - lx / 2, cy - ly / 2, zbase), (cx + lx / 2, cy + ly / 2, zbase + lz * 0.44), "case", 0.045, 4)
+    box(p, (cx - lx / 2 + 0.01, cy - ly / 2 + 0.01, zbase + lz * 0.40), (cx + lx / 2 - 0.01, cy + ly / 2 - 0.01,
+        zbase + lz), "case", min(0.06, lz * 0.3), 4)
     # lid parting groove (dark band) and top ribs
     gz = zbase + lz * 0.42
     box(p, (cx - lx / 2 - 0.004, cy - ly / 2 - 0.004, gz), (cx + lx / 2 + 0.004, cy + ly / 2 + 0.004, gz + 0.012), "case_dark", 0.003)
@@ -90,25 +95,53 @@ def _case(name, cx, cy, zbase, lx, ly, lz, collection, mats):
     return p.finish(collection, smooth=40, weighted=True)
 
 
+def _traction_boards(cx, cy, zbase, collection, mats):
+    """Two stacked recovery boards (sand-coloured, cleated) strapped along the rack, plus a shovel."""
+    p = Part("overland_boards", mats)
+    L, W, T = 1.10, 0.31, 0.04
+    for k in range(2):
+        z0 = zbase + k * (T + 0.004)
+        x0 = cx + (k - 0.5) * 0.004
+        box(p, (x0 - W / 2, cy - L / 2, z0), (x0 + W / 2, cy + L / 2, z0 + T), "oc_board", 0.012, 2)
+    zt = zbase + 2 * (T + 0.004)
+    for i in range(9):                 # cleat rows (top board)
+        y = cy - L / 2 + 0.09 + i * (L - 0.18) / 8
+        for j in (-1, 0, 1):
+            box(p, (cx + j * 0.09 - 0.022, y - 0.022, zt - 0.002), (cx + j * 0.09 + 0.022, y + 0.022, zt + 0.014),
+                "oc_board", 0.004, 1)
+    for y in (cy - L * 0.3, cy + L * 0.3):   # straps
+        box(p, (cx - W / 2 - 0.006, y - 0.02, zbase - 0.012), (cx + W / 2 + 0.006, y + 0.02, zt + 0.018), "trim")
+    # shovel: handle along the rail, blade at the rear
+    sx = cx + W / 2 + 0.10
+    box(p, (sx - 0.016, cy - 0.40, zbase + 0.006), (sx + 0.016, cy + 0.46, zbase + 0.034), "wood", 0.006, 1)
+    box(p, (sx - 0.09, cy - 0.66, zbase + 0.004), (sx + 0.09, cy - 0.40, zbase + 0.016), "steel_blk", 0.01, 2)
+    return p.finish(collection, smooth=40, weighted=True)
+
+
 def build(cfg, collection, mats):
     cp = cfg["camper"]
-    shell_cfg = load_json(cp.get("config", "config/v1.json"))
+    shell_cfg = fit_shell_cfg(load_json(cp.get("config", "config/v1.json")), cfg["truck_info"])
     black = mats.car_paint("oc_black_paint", cp["paint_color"], metallic=0.0, roughness=0.55,
                            clearcoat=0.0, clearcoat_roughness=0.3, flake=0.0)
     mats.add("steel_blk", mats.principled("oc_steel_blk", base_color=(0.012, 0.012, 0.013, 1.0),
                                           roughness=0.5, metallic=0.6))
     mats.add("case", mats.principled("oc_case", base_color=(0.018, 0.019, 0.02, 1.0), roughness=0.42))
     mats.add("case_dark", mats.principled("oc_case_dark", base_color=(0.006, 0.006, 0.007, 1.0), roughness=0.6))
-    role = {"shell_paint": black, "glass": mats["glass_flush"], "trim": mats["trim"], "lamp": mats["lamp_red_lens"]}
+    mats.add("oc_board", mats.principled("oc_board", base_color=(0.30, 0.22, 0.12, 1.0), roughness=0.6))
+    role = {"shell_paint": black, "glass": mats["glass_tint"], "trim": mats["seal"], "lamp": mats["lamp_red_lens"]}
     objs = build_shell(shell_cfg, role, collection)
     for ob in objs:
         ob.name = "overland_canopy_" + ob.name
         if "shell_body" in ob.name:
             add_weighted_normals(ob)
     fr = ShellFrame(shell_cfg)
+    shell_materials(mats)
+    objs.append(shell_details(shell_cfg, fr, mats, collection, prefix="overland_canopy_"))
+    objs.append(shell_interior(shell_cfg, fr, mats, collection, cfg["truck_info"], prefix="overland_canopy_"))
     rack, zdeck, xr = _rack(cp, fr, collection, mats)
     objs.append(rack)
     y0, y1 = cp["rack_front_y"], cp["rack_rear_y"]
-    objs.append(_case("overland_case_big", 0.0, y0 - 0.55, zdeck, 0.95, 0.50, 0.32, collection, mats))
-    objs.append(_case("overland_case_small", 0.05, y1 + 0.38, zdeck, 0.72, 0.42, 0.24, collection, mats))
+    objs.append(_case("overland_case_big", -0.22, y0 - 0.42, zdeck, 0.78, 0.46, 0.26, collection, mats))
+    objs.append(_case("overland_case_small", -0.22, y1 + 0.34, zdeck, 0.62, 0.40, 0.20, collection, mats))
+    objs.append(_traction_boards(0.36, (y0 + y1) / 2, zdeck, collection, mats))
     return objs

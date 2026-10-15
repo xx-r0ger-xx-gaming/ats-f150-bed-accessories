@@ -6,8 +6,7 @@
     "module": "v1_shell",
     "config": "config/v1.json"
   },
-  "truck": {
-    "type": "pickup"
+  "truck": {"type": "pickup", "source": "reference"
   },
   "paint": "config/v1.json#materials.shell_paint",
   "views": ["rear34", "side", "front34"],

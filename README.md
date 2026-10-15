@@ -71,3 +71,9 @@ Create original geometry and textures. Do not commit, upload, or redistribute pr
 ## Disclaimer
 
 Unofficial fan-made mod. Not affiliated with, sponsored by, or endorsed by Ford Motor Company or SCS Software. Ford and F-150 are trademarks of Ford Motor Company; American Truck Simulator is a trademark of SCS Software. Names are used only to identify the vehicle this mod fits. No Ford or SCS logos, models, or game assets are included.
+
+## Credits
+
+Preview renders of the pickup variants use a third-party truck model as a stand-in base vehicle. It is used only for those preview renders: it is downloaded by hand into `tools/reference-truck/` (gitignored), never committed, never exported, and not included in the mod or any release package.
+
+"2023 Ford F150 Lihtning Platinum" (https://skfb.ly/pFtDT) by tonielpro520 is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/). Modified: badges removed, repainted, camper added.

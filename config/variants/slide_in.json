@@ -7,13 +7,12 @@
     "half_width": 1.08,
     "rear_overhang": 0.50,
     "roof_above_rails": 1.52,
-    "cabover_floor_above_cab_roof": 0.11,
-    "cabover_nose_y": 1.40,
+    "cabover_floor_above_cab_roof": 0.13,
+    "cabover_nose_y": 1.30,
     "gelcoat": [0.80, 0.785, 0.74, 1.0],
     "stripe": [0.055, 0.058, 0.062, 1.0]
   },
-  "truck": {
-    "type": "pickup",
+  "truck": {"type": "pickup", "source": "reference",
     "tailgate": "removed"
   },
   "paint": "config/v1.json#materials.shell_paint",

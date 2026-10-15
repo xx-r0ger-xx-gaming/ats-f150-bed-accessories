@@ -11,13 +11,14 @@
     "lid_front_overhang": 0.45,
     "lid_rear_overhang": 0.04,
     "lid_side_overhang": 0.025,
-    "lid_thickness": 0.095,
+    "lid_thickness": 0.13,
+    "lid_lip": 0.012,
+    "closed_gap": 0.03,
     "fabric_sag": 0.04,
     "fabric_folds": 0.013,
     "struts": true
   },
-  "truck": {
-    "type": "pickup"
+  "truck": {"type": "pickup", "source": "reference"
   },
   "paint": "config/v1.json#materials.shell_paint",
   "views": ["rear34", "side", "front34"],

@@ -65,8 +65,9 @@
       "roughness": 0.36,
       "clearcoat": 1.0,
       "clearcoat_roughness": 0.03,
-      "flake": 0.45,
-      "dirt": 0.35,
+      "flake": 0.6,
+      "dirt": 0.15,
+      "render_roughness": 0.17,
       "role": "body_paint"
     },
     "glass": {

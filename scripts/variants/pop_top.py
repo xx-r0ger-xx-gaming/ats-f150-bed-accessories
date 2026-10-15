@@ -1,4 +1,5 @@
-"""Pop-top camper: dark cab-high base box on the bed, light aluminium hard lid, fabric tent walls.
+"""Pop-top camper: dark cab-high base box on the bed, light aluminium hard lid with a drip lip,
+olive canvas tent walls (zippered mesh windows); smoked base windows over an interior.
 
 Parameters (cfg["camper"], all optional):
   state               "deployed" (default) or "closed" (travel pose: lid down, no tent walls/struts)
@@ -10,6 +11,8 @@ Parameters (cfg["camper"], all optional):
   fabric_sag          inward pull of the taut tent walls at mid height (m)
   fabric_folds        amplitude of the diagonal tension folds (m)
   struts              gas struts at the four corners when deployed (bool)
+  lid_lip             depth of the drip lip skirt under the lid edge (m)
+  closed_gap          travel pose: lid height above the base top, filled by the folded canvas (m)
 
 Original geometry only (no logos/brands). Render-only, never exported.
 """
@@ -18,8 +21,9 @@ import math
 import bmesh
 from mathutils import Matrix, Vector
 
-from lib.materials import _bump, _new, _noise, _set
-from lib.meshkit import Part, add_weighted_normals, box, cut_openings, faces_of, loft, rounded_rect, set_smooth
+from lib.meshkit import (
+    Part, add_weighted_normals, annulus_prism, box, cut_openings, faces_of, loft, rounded_rect, set_smooth,
+)
 
 TRUCK_TYPES = ("pickup",)
 DESCRIPTION = "Pop-top camper (raised lid, fabric tent walls)"
@@ -36,28 +40,12 @@ def _materials(mats):
                                        clearcoat=0.6, flake=0.08))
     mats.add("pop_base", mats.car_paint("pop_base", (0.016, 0.017, 0.018, 1), metallic=0.0, roughness=0.55,
                                         clearcoat=0.25, clearcoat_roughness=0.25, flake=0.0))
-    # tent canvas: dark grey with a woven micro bump
-    mat, nodes, links, b = _new("pop_fabric")
-    n = _noise(nodes, links, 260.0, 4.0)
-    bump = _bump(nodes, links, n.outputs["Fac"], 0.25, 0.002)
-    links.new(bump.outputs["Normal"], b.inputs["Normal"])
-    _set(b, base_color=(0.016, 0.017, 0.018, 1), roughness=0.9, specular=0.25)
-    mat.diffuse_color = (0.016, 0.017, 0.018, 1)
-    mats.add("pop_fabric", mat)
-    # bug mesh: near-black fine grid
-    mat, nodes, links, b = _new("pop_mesh")
-    tc = nodes.new("ShaderNodeTexCoord")
-    chk = nodes.new("ShaderNodeTexChecker")
-    chk.inputs["Scale"].default_value = 700.0
-    links.new(tc.outputs["Object"], chk.inputs["Vector"])
-    bump = _bump(nodes, links, chk.outputs["Fac"], 0.05, 0.0005)
-    links.new(bump.outputs["Normal"], b.inputs["Normal"])
-    _set(b, base_color=(0.006, 0.006, 0.007, 1), roughness=0.8, specular=0.2)
-    mat.diffuse_color = (0.008, 0.008, 0.009, 1)
-    mats.add("pop_mesh", mat)
-    # zipper flap seam: slightly lighter, smoother webbing
-    mats.add("pop_zip", mats.principled("pop_zip", base_color=(0.018, 0.018, 0.019, 1), roughness=0.5,
-                                         specular=0.4, sheen=0.3))
+    # tent canvas: olive-charcoal ripstop canvas (weave + soft wrinkles + mottling, library factory)
+    mats.add("pop_fabric", mats.canvas_material("pop_fabric", (0.060, 0.064, 0.048)))
+    mats.add("pop_mesh", mats["canvas_mesh"])
+    # zipper flap seam: darker, smoother webbing; zipper coil: satin black
+    mats.add("pop_zip", mats.principled("pop_zip", base_color=(0.020, 0.021, 0.018, 1), roughness=0.55,
+                                         specular=0.35, sheen=0.4))
 
 
 # ------------------------------------------------------------------ helpers
@@ -134,6 +122,32 @@ def _tube(part, p, q, r, key, seg=10):
     return vs
 
 
+def _offset(ol, d):
+    """Offset a CCW (u, v) outline by d (d > 0 = outward)."""
+    n = len(ol)
+    out = []
+    for i in range(n):
+        a, b = Vector(ol[i - 1]), Vector(ol[(i + 1) % n])
+        t = (b - a).normalized()
+        out.append((ol[i][0] + t.y * d, ol[i][1] - t.x * d))
+    return out
+
+
+def _glaze(part, ol, mapper, outward):
+    """Smoked pane 12 mm under the skin + rubber seal lip around the opening (mapper(u, v, d))."""
+    bm = part.bm
+    pane = bm.faces.new([bm.verts.new(mapper(u, v, -0.012)) for u, v in ol])
+    pane.normal_update()
+    if pane.normal.dot(Vector(outward)) < 0:
+        pane.normal_flip()
+    part.set_mat([pane], "glass_tint")
+    for (d_in, d_out, a, b, key) in ((-0.012, 0.0, -0.016, 0.003, "seal"), (0.0, 0.016, -0.002, 0.005, "seal")):
+        o, i = _offset(ol, d_out), _offset(ol, d_in)
+        faces = annulus_prism(bm, [mapper(u, v, a) for u, v in o], [mapper(u, v, b) for u, v in o],
+                              [mapper(u, v, a) for u, v in i], [mapper(u, v, b) for u, v in i])
+        part.set_mat(faces, key)
+
+
 def _tris(objs):
     return sum(sum(len(pl.vertices) - 2 for pl in o.data.polygons) for o in objs if o.type == "MESH")
 
@@ -145,8 +159,9 @@ def build(cfg, collection, mats):
     ti = cfg["truck_info"]
     _materials(mats)
     deployed = c.get("state", "deployed") != "closed"
-    lift_f = float(c.get("lift_front", 0.88)) if deployed else 0.0
-    lift_r = float(c.get("lift_rear", 0.92)) if deployed else 0.0
+    gap = float(c.get("closed_gap", 0.03))       # travel pose: lid rests on the folded canvas
+    lift_f = float(c.get("lift_front", 0.88)) if deployed else gap
+    lift_r = float(c.get("lift_rear", 0.92)) if deployed else gap
     deployed = deployed and max(lift_f, lift_r) > 0.05
 
     # ---- base box footprint (variant frame: rail top z = 0, bed front wall y = 0)
@@ -186,16 +201,23 @@ def build(cfg, collection, mats):
 
     # windows: side windows (both sides) + rear hatch glass, as flush pockets
     openings = []
+    glaze = Part(f"{NAME}_glazing", mats)
     wz0, wz1 = 0.085, zt - 0.095
     win_y0, win_y1 = yr + 0.20, yf - 0.16
     for sx in (-1, 1):
+        def sp(y, z, d, sx=sx):                    # point on the side skin, d > 0 = outward
+            return (sx * (side_x(z) + d), y, z)
         ol = rounded_rect(win_y0, win_y1, wz0, wz1, 0.06, 4)
-        ring_o = [(sx * (side_x(z) + 0.03), y, z) for y, z in ol]
-        ring_i = [(sx * (side_x(z) - 0.012), y, z) for y, z in ol]
-        openings.append((ring_o, ring_i))
+        openings.append(([sp(y, z, 0.03) for y, z in ol], [sp(y, z, -0.20) for y, z in ol]))
+        _glaze(glaze, ol, sp, (sx, 0, 0))
     ol = rounded_rect(-(hwt - 0.15), hwt - 0.15, 0.115, zt - 0.085, 0.06, 4)
-    openings.append(([(x, yr - 0.04, z) for x, z in ol], [(x, yr + 0.014, z) for x, z in ol]))
-    cut_openings(base_ob, openings, mats, collection, glass_key="glass_flush", wall_key="trim")
+
+    def rp(x, z, d):
+        return (x, yr - d, z)
+    openings.append(([rp(x, z, 0.04) for x, z in ol], [rp(x, z, -0.20) for x, z in ol]))
+    _glaze(glaze, ol, rp, (0, -1, 0))
+    cut_openings(base_ob, openings, mats, collection, glass_key="curtain", wall_key="interior")
+    objs.append(glaze.finish(collection, smooth=40))
     set_smooth(base_ob, 35)
     add_weighted_normals(base_ob)
     objs.append(base_ob)
@@ -234,6 +256,12 @@ def build(cfg, collection, mats):
     for xr in (-0.42, 0.0, 0.42):
         box(lid, (xr - 0.035, ylr + 0.12, zt + thk - 0.004), (xr + 0.035, yf - 0.10, zt + thk + 0.008),
             "pop_lid", bev=0.006)
+    # drip lip: a skirt under the lid edge (sides + rear) that hangs past the base top
+    lip = float(c.get("lid_lip", 0.012))
+    for sx in (-1, 1):
+        xa, xb = sorted((sx * (W - 0.011), sx * (W + 0.001)))
+        box(lid, (xa, ylr + 0.035, zt - lip), (xb, yf - 0.06, zt + 0.03), "trim", bev=0.004)
+    box(lid, (-(W - 0.03), ylr + 0.010, zt - lip), (W - 0.03, ylr + 0.022, zt + 0.03), "trim", bev=0.004)
     lid_verts = list(lid.bm.verts)
     bmesh.ops.transform(lid.bm, matrix=M, verts=lid_verts)
     objs.append(lid.finish(collection, smooth=40, weighted=True))
@@ -242,18 +270,46 @@ def build(cfg, collection, mats):
     if deployed:
         objs += _build_tent(c, collection, mats, M, hwt, yf, yr, zt, side_x)
     else:
+        objs.append(_folded_seam(collection, mats, M, hwt, yf, yr, zt, lift_f))
+        # over-centre latches on the base flank, hooks on the lid lip
         latch = Part(f"{NAME}_latches", mats)
+        W = hwt + float(c.get("lid_side_overhang", 0.025))
         for sx in (-1, 1):
             for yy in (yf - 0.25, yr + 0.25):
-                x0 = sx * (side_x(zt - 0.05) + 0.004)
-                x1 = sx * (side_x(zt - 0.05) + 0.02)
-                box(latch, (min(x0, x1), yy - 0.035, zt - 0.08), (max(x0, x1), yy + 0.035, zt + 0.03),
-                    "trim_gloss", bev=0.004)
+                xs = side_x(zt - 0.08)
+                x0, x1 = sorted((sx * (xs - 0.002), sx * (xs + 0.018)))
+                box(latch, (x0, yy - 0.03, zt - 0.11), (x1, yy + 0.03, zt - 0.05), "trim_gloss", bev=0.004)
+                x0, x1 = sorted((sx * (xs + 0.006), sx * (xs + 0.012)))
+                box(latch, (x0, yy - 0.012, zt - 0.06), (x1, yy + 0.012, zt + lift_f - 0.015), "steel", bev=0.002)
+                x0, x1 = sorted((sx * (W - 0.001), sx * (W + 0.006)))
+                box(latch, (x0, yy - 0.022, zt + lift_f - 0.02), (x1, yy + 0.022, zt + lift_f + 0.012), "steel",
+                    bev=0.002)
         objs.append(latch.finish(collection, smooth=35))
 
     print(f"[{NAME}] state={'deployed' if deployed else 'closed'} lift=({lift_f:.2f},{lift_r:.2f}) "
           f"camper tris={_tris(objs)}")
     return objs
+
+
+def _folded_seam(collection, mats, M, hwt, yf, yr, zt, gap):
+    """Travel pose: the tent canvas folded into the gap between base top and lid, bulging out a
+    little in soft irregular pleats, with the attachment channel visible at the base top."""
+    hx = hwt - 0.035
+    plan = Plan(rounded_rect(-hx, hx, yr + 0.035, yf - 0.035, 0.06, 3), 0.03)
+    part = Part(f"{NAME}_folded_canvas", mats)
+    prof = [(0.0, -0.004), (0.026, 0.22), (0.042, 0.5), (0.03, 0.8), (0.0, 1.0)]
+    rings = []
+    for off, t in prof:
+        ring = []
+        for s_ in plan.ss:
+            p, n = plan.at(s_)
+            w = 1.0 + 0.45 * math.sin(s_ / 0.11) * math.sin(s_ / 0.043 + 1.3)
+            o = off * w if 0.0 < t < 1.0 else off
+            q = Vector((p.x + n.x * o, p.y + n.y * o, zt + t * gap))
+            ring.append(q)
+        rings.append(ring)
+    loft(part, rings, "pop_fabric", cap_start=False, cap_end=False)
+    return part.finish(collection, smooth=70)
 
 
 def _build_tent(c, collection, mats, M, hwt, yf, yr, zt, side_x):

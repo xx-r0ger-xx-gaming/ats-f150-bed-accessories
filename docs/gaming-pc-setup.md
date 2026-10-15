@@ -22,6 +22,19 @@ Downloads into `tools/` (gitignored), sha256-verified: Blender 3.6.23 portable (
 
 Check: `python scripts\preflight.py --stage deploy` (all PASS except possibly the game log, which only exists after the first launch).
 
+### Reference truck for preview renders (manual)
+
+The pickup render variants use a third-party model as the base truck (render-only; never committed,
+exported or packaged; credit in the README). It cannot be fetched by script (Sketchfab needs a
+login):
+
+1. Open https://skfb.ly/pFtDT ("2023 Ford F150 Lihtning Platinum" by tonielpro520, CC BY 4.0).
+2. Download > glTF > **glTF Binary (.glb)** (about 48 MB).
+3. Save it as `tools\reference-truck\2023_ford_f150_lihtning_platinum.glb` (create the folder).
+
+Without it, rendering a pickup variant stops with these instructions; use
+`--set truck.source=procedural` to render on the procedural stand-in instead.
+
 ## 3. Extract the Road Trip DLC definitions (private)
 
 The extracted data is proprietary: it stays in `local-reference/` (gitignored, and `package.py` refuses any file whose hash matches something in there). Never commit or copy it elsewhere.

@@ -10,11 +10,12 @@ rack and bikes) is low-poly overlay geometry a few mm proud of the shell. No log
 import math
 
 import bmesh
+import bpy
 from mathutils import Vector
 
 from lib.meshkit import (
-    Part, add_weighted_normals, annulus_prism, arc_band_x, boolean_apply, box, cylinder_x,
-    cylinder_y, cylinder_z, loft, oriented_box, rounded_rect,
+    Part, add_weighted_normals, annulus_prism, arc_band_x, bm_object, boolean_apply, box, build_prism,
+    cylinder_x, cylinder_y, cylinder_z, loft, oriented_box, rounded_rect, set_smooth,
 )
 
 TRUCK_TYPES = ("cab_chassis",)
@@ -34,6 +35,8 @@ def _materials(mats):
                                                 roughness=0.6, specular=0.15))
         mats.add("cc_gfx_grey", mats.principled(P + "_gfx_grey", base_color=(0.06, 0.063, 0.068, 1),
                                                 roughness=0.6, specular=0.15))
+        mats.add("cc_frame", mats.principled(P + "_frame", base_color=(0.045, 0.047, 0.05, 1), metallic=0.6,
+                                             roughness=0.38, clearcoat=0.2))
         mats.add("cc_awning", mats.principled(P + "_awning", base_color=(0.05, 0.052, 0.055, 1),
                                               metallic=0.5, roughness=0.35))
         mats.add("cc_bike_a", mats.car_paint(P + "_bike_a", (0.35, 0.02, 0.015, 1), metallic=0.5,
@@ -107,15 +110,100 @@ def ring_band(part, pl, outer, inner, d0, d1, key):
     part.set_mat(faces, key)
 
 
+POCKETS = []          # (plane, outline) of every window opening; cut into the coach after the details
+
+
 def rv_window(part, pl, u0, u1, v0, v1, r=0.07, frame=0.035, divider=True):
+    """RV window: proud satin-aluminium frame, rubber seal, smoked pane 14 mm in, interior pocket behind."""
     outer = rounded_rect(u0 - frame, u1 + frame, v0 - frame, v1 + frame, r + frame, 3)
     inner = rounded_rect(u0, u1, v0, v1, r, 3)
-    ring_band(part, pl, outer, inner, -0.004, 0.024, "trim")
-    slab(part, pl, inner, -0.004, 0.012, "glass_flush")
+    seal_in = rounded_rect(u0 + 0.012, u1 - 0.012, v0 + 0.012, v1 - 0.012, max(r - 0.012, 0.01), 3)
+    ring_band(part, pl, outer, inner, -0.004, 0.026, "cc_frame")
+    ring_band(part, pl, inner, seal_in, -0.022, 0.004, "seal")
+    bm = part.bm
+    pane = bm.faces.new([bm.verts.new(pl.p(u, v, -0.014)) for u, v in inner])
+    pane.normal_update()
+    out = Vector(pl.p(u0, v0, 1.0)) - Vector(pl.p(u0, v0, 0.0))
+    if pane.normal.dot(out) < 0:
+        pane.normal_flip()
+    part.set_mat([pane], "glass_tint")
+    POCKETS.append((pl, inner))
     if divider and (u1 - u0) > 0.55:
         um = (u0 + u1) / 2
-        slab(part, pl, [(um - 0.012, v0), (um + 0.012, v0), (um + 0.012, v1), (um - 0.012, v1)],
-             0.0, 0.02, "trim")
+        slab(part, pl, [(um - 0.014, v0), (um + 0.014, v0), (um + 0.014, v1), (um - 0.014, v1)],
+             -0.03, 0.022, "cc_frame")
+        # slider track along the bottom of the glass
+        slab(part, pl, [(u0, v0), (u1, v0), (u1, v0 + 0.02), (u0, v0 + 0.02)], -0.03, 0.006, "cc_frame")
+
+
+def entry_door(part, pl, s, u0, u1, v0, v1, win, r=0.05):
+    """Entry door skin with a window opening, paddle handle + lock, hinges and a folding step."""
+    wu0, wu1, wv0, wv1, wr = win
+    fr = 0.025
+    inner = rounded_rect(u0, u1, v0, v1, r, 3)
+    outer = rounded_rect(u0 - 0.012, u1 + 0.012, v0 - 0.012, v1 + 0.012, r + 0.012, 3)
+    hole = rounded_rect(wu0 - fr, wu1 + fr, wv0 - fr, wv1 + fr, wr + fr, 3)
+    ring_band(part, pl, outer, inner, -0.003, 0.007, "trim")
+    ring_band(part, pl, inner, hole, -0.003, 0.009, "cc_fiber")
+    rv_window(part, pl, wu0, wu1, wv0, wv1, r=wr, frame=fr, divider=False)
+    # paddle handle in a black bezel + key cylinder above it (latch side = u1)
+    um, vm = u1 - 0.10, v0 + 0.98
+    slab(part, pl, rounded_rect(um - 0.05, um + 0.05, vm - 0.075, vm + 0.075, 0.02, 2), 0.006, 0.02, "trim_gloss")
+    slab(part, pl, rounded_rect(um - 0.032, um + 0.032, vm - 0.05, vm + 0.012, 0.012, 2), 0.016, 0.032, "chrome")
+    slab(part, pl, rounded_rect(um - 0.012, um + 0.012, vm + 0.028, vm + 0.052, 0.01, 2), 0.016, 0.03, "chrome")
+    # hinges on the front edge
+    for vv in (v0 + 0.25, v1 - 0.30):
+        slab(part, pl, rounded_rect(u0 - 0.02, u0 + 0.03, vv, vv + 0.10, 0.008, 1), 0.006, 0.02, "steel")
+    # folding entry step: two ribbed aluminium treads on brackets, under the door
+    x0 = s * pl.base
+    zt = v0 - 0.30
+    for k in range(2):
+        a, b = sorted((x0 + s * (0.04 + 0.21 * k), x0 + s * (0.04 + 0.21 * k + 0.20)))
+        zk = zt + 0.16 * (1 - k)
+        box(part, (a, u0 + 0.06, zk - 0.03), (b, u1 - 0.06, zk), "alloy", bev=0.006)
+        for kk in range(6):
+            yy = u0 + 0.10 + kk * (u1 - u0 - 0.20) / 5
+            box(part, (a + 0.01, yy - 0.006, zk), (b - 0.01, yy + 0.006, zk + 0.006), "alloy")
+    for uu in (u0 + 0.08, u1 - 0.08):
+        a, b = sorted((x0 - s * 0.03, x0 + s * 0.45))
+        box(part, (a, uu - 0.012, zt - 0.05), (b, uu + 0.012, zt - 0.03), "frame", bev=0.004)
+        a, b = sorted((x0 - s * 0.03, x0 + s * 0.03))
+        box(part, (a, uu - 0.015, zt - 0.05), (b, uu + 0.015, v0 - 0.02), "frame", bev=0.004)
+
+
+def window_band_trim(part, ring_at, z0, z1, y_min):
+    """Depth for the wraparound cabover glass: a deep eyebrow over it and a sill under it.
+    ring_at(z) -> closed plan ring [(x, y, z)]; only the nose part (y > y_min) is used."""
+    def strip(z, off_in, off_out, za, zb):
+        ring = ring_at(z)
+        n = len(ring)
+        pts = []
+        for i in range(n):
+            a, b = Vector(ring[i - 1][:2]), Vector(ring[(i + 1) % n][:2])
+            t = (b - a).normalized()
+            pts.append((Vector(ring[i][:2]), Vector((t.y, -t.x)), ring[i][1] > y_min))
+        k0 = next(i for i in range(n) if pts[i][2] and not pts[i - 1][2])
+        run = []
+        i = k0
+        while pts[i % n][2] and len(run) < n:
+            run.append(pts[i % n])
+            i += 1
+        return [[(p.x + nrm.x * o, p.y + nrm.y * o, zz) for o, zz in
+                 ((off_in, za), (off_out, za), (off_out, zb), (off_in, zb))] for p, nrm, _ in run]
+    for secs in (strip(z1 + 0.02, -0.02, 0.055, z1 + 0.002, z1 + 0.04),
+                 strip(z0 - 0.02, -0.02, 0.035, z0 - 0.035, z0 - 0.002)):
+        # sections run along the nose: transpose into 4 long rings (closed section, capped ends)
+        bm = part.bm
+        vs = [[bm.verts.new(q) for q in sec] for sec in secs]
+        faces = []
+        for A, B in zip(vs, vs[1:]):
+            for j in range(4):
+                k = (j + 1) % 4
+                faces.append(bm.faces.new([A[j], A[k], B[k], B[j]]))
+        faces.append(bm.faces.new(vs[0][::-1]))
+        faces.append(bm.faces.new(vs[-1]))
+        bmesh.ops.recalc_face_normals(bm, faces=faces)
+        part.set_mat(faces, "cc_frame")
 
 
 def hatch(part, pl, u0, u1, v0, v1, r=0.04, handle=True, gap_key="trim"):
@@ -198,6 +286,7 @@ def build(cfg, collection, mats):
     c = cfg["camper"]
     ti = cfg["truck_info"]
     _materials(mats)
+    POCKETS.clear()
     hw = c.get("half_width", 1.25)
     yb = c.get("rear_y", -3.98)
     zs = c.get("skirt_z", -0.30)
@@ -251,7 +340,8 @@ def build(cfg, collection, mats):
             upper.set_mat([f], "glass_flush")
         elif zw0 - 0.03 < cc.z < zw1 + 0.03 and cc.y > yw - 0.04:
             upper.set_mat([f], "trim")
-    objs.append(upper.finish(collection, smooth=40, weighted=True))
+    upper_ob = upper.finish(collection, smooth=40, weighted=False)
+    objs.append(upper_ob)
 
     def nose_y(z):
         for (z0, y0, *_), (z1, y1, *_) in zip(nose, nose[1:]):
@@ -261,6 +351,7 @@ def build(cfg, collection, mats):
 
     # ---------------- details on the shell
     d = Part(P + "_details", mats)
+    gx = Part(P + "_graphics", mats)          # decals: trimmed by the window cutter below
     for s in (-1, 1):
         pl = Plane("x", s, hw)
         door = s == ds
@@ -270,11 +361,8 @@ def build(cfg, collection, mats):
             rv_window(d, pl, -2.62, -1.42, 0.98, 1.72)          # lounge window over the arch
             rv_window(d, pl, -3.72, -3.12, 1.06, 1.66)          # rear bedroom window
             # entry door with window + grab handle + folding step
-            hatch(d, pl, -0.98, -0.30, zs + 0.17, 1.86, r=0.05)
-            rv_window(d, pl, -0.86, -0.42, 1.18, 1.66, r=0.08, frame=0.025, divider=False)
+            entry_door(d, pl, s, -0.98, -0.30, zs + 0.17, 1.86, (-0.86, -0.42, 1.18, 1.66, 0.08))
             slab(d, pl, rounded_rect(-0.24, -0.20, 0.55, 1.35, 0.018, 2), 0.0, 0.045, "chrome")
-            box(d, (s * hw - 0.0 if s > 0 else -(hw + 0.16), -0.96, zs - 0.10),
-                (hw + 0.16 if s > 0 else -hw, -0.32, zs - 0.06), "trim")
             for u0, u1, v1 in ((-1.72, -1.10, 0.48), (-3.84, -3.06, 0.48)):
                 hatch(d, pl, u0, u1, zs + 0.18, v1)
         else:
@@ -299,7 +387,7 @@ def build(cfg, collection, mats):
              ((-1.95, zs + 0.70), (-0.9, zs + 0.85), (0.02, 0.95), 0.20, 0.03, "cc_gfx_dark"),
              ((-0.1, 1.38), (0.45, 1.42), (1.35, 1.52), 0.07, 0.0, "cc_gfx_grey")]
         for a, cpt, b, w0, w1, key in g:
-            slab(d, pl, blade(a, cpt, b, w0, w1, 12), -0.002, 0.004, key)
+            slab(gx, pl, blade(a, cpt, b, w0, w1, 12), -0.002, 0.004, key)
 
     # cabover front: amber clearance lamps above the windshield band, lower nose marker
     for x in (-0.48, -0.24, 0.0, 0.24, 0.48):
@@ -321,7 +409,7 @@ def build(cfg, collection, mats):
              "lamp_red_lens")
     for a, cpt, b, w0, w1, key in (((-1.05, 0.10), (-0.4, 0.15), (0.75, 0.95), 0.50, 0.0, "cc_gfx_dark"),
                                    ((-1.05, 0.72), (-0.6, 0.80), (-0.05, 1.08), 0.18, 0.0, "cc_gfx_grey")):
-        slab(d, pr, blade(a, cpt, b, w0, w1, 12), -0.002, 0.004, key)
+        slab(gx, pr, blade(a, cpt, b, w0, w1, 12), -0.002, 0.004, key)
     # spare-plate box / license plate recess (blank plate, no text)
     slab(d, pr, rounded_rect(-0.20, 0.20, zs + 0.18, zs + 0.40, 0.02, 1), -0.003, 0.012, "plate")
     # ladder (rear, curb side)
@@ -357,7 +445,26 @@ def build(cfg, collection, mats):
         cylinder_y(d, xa, zr - 0.25, 0.08, y - 0.03, y + 0.03, "trim", seg=16)
         xs0, xs1 = sorted((ds * (hw + 0.005), ds * (hw + 0.045)))
         box(d, (xs0, y - 0.025, zs + 0.22), (xs1, y + 0.025, zr - 0.30), "trim", bev=0.006, seg=1)
+    window_band_trim(d, lambda z: plan_ring(z, hw, yb, nose_y(z), rb, 0.52, side_up), zw0, zw1, yw - 0.02)
     objs.append(d.finish(collection, smooth=40, weighted=True))
+
+    # interior pockets behind every window (curtain back wall, dark side walls), both body halves
+    cbm = bmesh.new()
+    for pl, ol in POCKETS:
+        faces = build_prism(cbm, [pl.p(u, v, 0.06) for u, v in ol], [pl.p(u, v, -0.16) for u, v in ol], mat_index=1)
+        bmesh.ops.recalc_face_normals(cbm, faces=faces)
+        faces[1].material_index = 0
+    cutter = bm_object(P + "_window_cut", cbm, [mats["curtain"], mats["interior"]], collection)
+    gx_ob = gx.finish(collection, smooth=0)
+    objs.append(gx_ob)
+    for ob in (lower_ob, upper_ob, gx_ob):
+        ob.modifiers.clear()
+        boolean_apply(ob, cutter, remove_cutters=False)
+        set_smooth(ob, 40)
+        add_weighted_normals(ob)
+    me = cutter.data
+    bpy.data.objects.remove(cutter)
+    bpy.data.meshes.remove(me)
 
     # ---------------- bike rack + bikes (hitch mounted, behind the bumper)
     if c.get("bikes", 2):

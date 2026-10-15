@@ -21,7 +21,7 @@ KEYS = (
     "paint", "paint_dark", "glass", "glass_light", "glass_flush", "glass_clear", "interior", "trim", "trim_gloss", "rubber", "tire", "chrome",
     "alloy", "alloy_dark", "steel", "lamp_red", "lamp_red_lens", "lamp_amber", "lamp_clear",
     "led_white", "reflector", "plate", "underbody", "frame", "bed_liner", "decal_black", "fabric",
-    "wood", "plastic_white",
+    "wood", "plastic_white", "glass_tint", "curtain", "canvas", "canvas_mesh", "seal",
 )
 
 DEFAULT_PAINT = {"base_color": [0.52, 0.54, 0.56, 1.0], "metallic": 0.55, "roughness": 0.32,
@@ -158,7 +158,7 @@ class MaterialLibrary:
             sep.inputs["Color1"].default_value = (0.5, 0.5, 1.0, 1.0)
             links.new(vor.outputs["Color"], sep.inputs["Color2"])
             nmap = nodes.new("ShaderNodeNormalMap")
-            nmap.inputs["Strength"].default_value = 0.06
+            nmap.inputs["Strength"].default_value = 0.08
             links.new(sep.outputs["Color"], nmap.inputs["Color"])
             links.new(nmap.outputs["Normal"], b.inputs["Normal"])
             # flakes also vary the base brightness a touch
@@ -166,15 +166,43 @@ class MaterialLibrary:
             hsv.inputs["Color"].default_value = bc
             links.new(_value_ramp(nodes, links, vor.outputs["Distance"], 1.08, 0.94), hsv.inputs["Value"])
             links.new(hsv.outputs["Color"], b.inputs["Base Color"])
+            # flakes = tiny mirrors: per-cell roughness spread gives the base coat its sparkle
+            links.new(_value_ramp(nodes, links, vor.outputs["Distance"], roughness * 0.55, roughness * 1.25),
+                      b.inputs["Roughness"])
         if dirt > 0 and self.ground_z is not None:
             self._add_dirt(nodes, links, b, bc, roughness, clearcoat, dirt)
         peel = _noise(nodes, links, 180.0, 2.0)
         bump = _bump(nodes, links, peel.outputs["Fac"], 0.015, 0.002)
         links.new(bump.outputs["Normal"], b.inputs["Clearcoat Normal"])
+        if clearcoat > 0.05:
+            self._add_coat(nodes, links, b, clearcoat, clearcoat_roughness, bump.outputs["Normal"])
         mat.diffuse_color = bc
         mat.metallic = metallic
         mat.roughness = roughness
         return mat
+
+    def _add_coat(self, nodes, links, b, strength, rough, normal):
+        """Real clearcoat: a sharp dielectric glossy layer (IOR 1.5 Fresnel) over the base shader.
+        Principled's own Clearcoat lobe is too weak to read as wet paint; this mirrors the HDRI."""
+        out = nodes["Material Output"]
+        gl = nodes.new("ShaderNodeBsdfGlossy")
+        gl.distribution = "GGX"
+        gl.inputs["Roughness"].default_value = max(min(rough, 0.2), 0.0)
+        links.new(normal, gl.inputs["Normal"])
+        fr = nodes.new("ShaderNodeFresnel")
+        fr.inputs["IOR"].default_value = 1.5
+        links.new(normal, fr.inputs["Normal"])
+        k = nodes.new("ShaderNodeMath")
+        k.operation = "MULTIPLY"
+        k.use_clamp = True
+        k.inputs[1].default_value = strength
+        links.new(fr.outputs["Fac"], k.inputs[0])
+        mix = nodes.new("ShaderNodeMixShader")
+        links.new(k.outputs[0], mix.inputs["Fac"])
+        links.new(b.outputs["BSDF"], mix.inputs[1])
+        links.new(gl.outputs["BSDF"], mix.inputs[2])
+        links.new(mix.outputs["Shader"], out.inputs["Surface"])
+        b.inputs["Clearcoat"].default_value = min(b.inputs["Clearcoat"].default_value, 0.3)
 
     def _add_dirt(self, nodes, links, b, bc, roughness, clearcoat, amount):
         """Road dust on the lower body: fades out ~0.9 m above the road (world Z), noisy edge."""
@@ -225,7 +253,7 @@ class MaterialLibrary:
 
     def paint_from_spec(self, name, spec):
         return self.car_paint(name, spec["base_color"], metallic=max(spec.get("metallic", 0.0), 0.0),
-                              roughness=spec.get("roughness", 0.3),
+                              roughness=spec.get("render_roughness", spec.get("roughness", 0.3)),
                               clearcoat=max(spec.get("clearcoat", 0.0), 0.8),
                               clearcoat_roughness=spec.get("clearcoat_roughness", 0.03),
                               flake=spec.get("flake", 0.25 if spec.get("metallic", 0.0) > 0.2 else 0.0),
@@ -267,6 +295,90 @@ class MaterialLibrary:
         mat.diffuse_color = (*_rgba(tint)[:3], 0.5)
         return mat
 
+    def _m_glass_tint(self, name):
+        """Camper glazing over a real interior pocket: smoked (~13 % transmission), crisp reflections.
+        A small reflectance floor on top of Fresnel keeps sky/horizon reflections visible head-on."""
+        mat = self.thin_glass(name, (0.125, 0.135, 0.14), reflect=1.0)
+        nodes, links = mat.node_tree.nodes, mat.node_tree.links
+        fr = next(n for n in nodes if n.bl_idname == "ShaderNodeFresnel")
+        mix = next(n for n in nodes if n.bl_idname == "ShaderNodeMixShader")
+        fr.inputs["IOR"].default_value = 1.6
+        m = nodes.new("ShaderNodeMapRange")
+        m.inputs["To Min"].default_value = 0.12
+        m.inputs["To Max"].default_value = 1.0
+        links.new(fr.outputs["Fac"], m.inputs["Value"])
+        links.new(m.outputs["Result"], mix.inputs["Fac"])
+        return mat
+
+    def _m_curtain(self, name):
+        """Interior behind camper glass: pleated warm-grey curtain fabric (diagonal object-space bands
+        so pleats show on side and end walls alike)."""
+        mat, nodes, links, b = _new(name)
+        tc = nodes.new("ShaderNodeTexCoord")
+        wave = nodes.new("ShaderNodeTexWave")
+        wave.wave_type = "BANDS"
+        wave.bands_direction = "DIAGONAL"
+        wave.inputs["Scale"].default_value = 9.0
+        wave.inputs["Distortion"].default_value = 1.5
+        links.new(tc.outputs["Object"], wave.inputs["Vector"])
+        col = _ramp(nodes, links, wave.outputs["Fac"], [(0.0, (0.07, 0.065, 0.058)), (1.0, (0.20, 0.19, 0.17))])
+        links.new(col.outputs["Color"], b.inputs["Base Color"])
+        bump = _bump(nodes, links, wave.outputs["Fac"], 0.5, 0.01)
+        links.new(bump.outputs["Normal"], b.inputs["Normal"])
+        _set(b, roughness=0.9, sheen=0.6, specular=0.2)
+        mat.diffuse_color = (0.14, 0.13, 0.12, 1)
+        return mat
+
+    def canvas_material(self, name, color, wrinkle=1.0):
+        """Tent canvas: woven micro bump, larger soft wrinkles, slight colour mottling and sheen."""
+        mat, nodes, links, b = _new(name)
+        weave = _noise(nodes, links, 900.0, 2.0)
+        tc = nodes.new("ShaderNodeTexCoord")
+        chk = nodes.new("ShaderNodeTexChecker")
+        chk.inputs["Scale"].default_value = 450.0
+        links.new(tc.outputs["Object"], chk.inputs["Vector"])
+        wr = _noise(nodes, links, 7.0, 4.0, rough=0.5)
+        wr2 = _noise(nodes, links, 22.0, 2.0)
+        add = nodes.new("ShaderNodeMath")
+        add.operation = "ADD"
+        links.new(wr.outputs["Fac"], add.inputs[0])
+        links.new(wr2.outputs["Fac"], add.inputs[1])
+        b1 = _bump(nodes, links, add.outputs[0], 0.35 * wrinkle, 0.03)
+        b2 = _bump(nodes, links, chk.outputs["Fac"], 0.12, 0.0006)
+        links.new(b1.outputs["Normal"], b2.inputs["Normal"])
+        b3 = _bump(nodes, links, weave.outputs["Fac"], 0.1, 0.0008)
+        links.new(b2.outputs["Normal"], b3.inputs["Normal"])
+        links.new(b3.outputs["Normal"], b.inputs["Normal"])
+        c = _rgba(color)
+        dark = tuple(v * 0.75 for v in c[:3])
+        lite = tuple(min(v * 1.25, 1.0) for v in c[:3])
+        mot = _noise(nodes, links, 3.0, 3.0)
+        cr = _ramp(nodes, links, mot.outputs["Fac"], [(0.3, dark), (0.7, lite)])
+        links.new(cr.outputs["Color"], b.inputs["Base Color"])
+        _set(b, roughness=0.88, sheen=0.8, specular=0.25)
+        mat.diffuse_color = c
+        return mat
+
+    def _m_canvas(self, name):
+        return self.canvas_material(name, (0.055, 0.058, 0.045))
+
+    def _m_canvas_mesh(self, name):
+        """No-see-um mesh window: fine dark grid with a soft sheen."""
+        mat, nodes, links, b = _new(name)
+        tc = nodes.new("ShaderNodeTexCoord")
+        chk = nodes.new("ShaderNodeTexChecker")
+        chk.inputs["Scale"].default_value = 1400.0
+        links.new(tc.outputs["Object"], chk.inputs["Vector"])
+        bump = _bump(nodes, links, chk.outputs["Fac"], 0.25, 0.0004)
+        links.new(bump.outputs["Normal"], b.inputs["Normal"])
+        _set(b, base_color=(0.004, 0.004, 0.0045, 1), roughness=0.6, specular=0.3, sheen=0.25)
+        mat.diffuse_color = (0.006, 0.006, 0.007, 1)
+        return mat
+
+    def _m_seal(self, name):
+        """Window/door rubber seal: black EPDM, satin."""
+        return self.principled(name, base_color=(0.008, 0.008, 0.009, 1), roughness=0.45, specular=0.45)
+
     def _m_glass(self, name):
         return self.thin_glass(name, (0.10, 0.11, 0.115))
 
@@ -280,7 +392,7 @@ class MaterialLibrary:
     def _m_glass_flush(self, name):
         """Tinted privacy glass, opaque (glazing sits on closed solids): dark, sharp, fresnel reflection."""
         mat, nodes, links, b = _new(name)
-        _set(b, base_color=(0.004, 0.005, 0.006, 1), roughness=0.015, specular=0.6, metallic=0.0,
+        _set(b, base_color=(0.006, 0.007, 0.008, 1), roughness=0.0, specular=0.9, metallic=0.0,
              clearcoat=1.0, clearcoat_roughness=0.0)
         mat.diffuse_color = (0.01, 0.012, 0.015, 1)
         mat.roughness = 0.02
