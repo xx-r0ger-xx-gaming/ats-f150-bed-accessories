@@ -1117,7 +1117,9 @@ def build_reference_truck(spec, mats, collection):
     from lib.common import PipelineError, repo_path
     s = dict(REFERENCE_DEFAULTS)
     s.update({k: v for k, v in spec.items() if not k.startswith("_")})
-    s["type"] = "pickup"
+    s.setdefault("type", "pickup")
+    if s["type"] not in ("pickup", "cab_chassis"):
+        raise PipelineError(f"reference truck: type must be pickup|cab_chassis, got {s['type']}")
     if s.get("tailgate", "closed") not in ("closed", "removed"):
         raise PipelineError("reference truck: tailgate must be closed|removed")
     s.setdefault("tailgate", "closed")
@@ -1243,6 +1245,10 @@ def build_reference_truck(spec, mats, collection):
             removed += _delete_faces(ob, lambda m, c: all(lo_b[i] + (yb_f if i == 1 else 0) <= c[i] <= hi_b[i] + (yb_f if i == 1 else 0)
                                                           for i in range(3)))
 
+    if s["type"] == "cab_chassis":
+        return _finish_reference_cab_chassis(s, mats, collection, objs, path, k, removed, scene, dg, xc, yb_f,
+                                             rail, roof, y_fa, y_ra, z_ax, tire_r, track)
+
     # ---- shift: y = 0 at the bed front wall (inner face), mount = rail top
     mount_z = rail
     shift = Matrix.Translation((-xc, -yb_f, 0.0))
@@ -1251,20 +1257,7 @@ def build_reference_truck(spec, mats, collection):
         ob.location.z -= mount_z
     mats.ground_z = -mount_z
 
-    # ---- materials: shared paint, our glass, blank plates
-    for ob in objs:
-        for slot in ob.material_slots:
-            m = slot.material
-            if _mat_suffix(m, s["paint_materials"]):
-                slot.material = mats["paint"]
-            elif _mat_suffix(m, s["plate_materials"]):
-                slot.material = mats["plate"]
-            else:
-                for suf, key in s["material_map"].items():
-                    if m is not None and m.name.endswith("_" + suf):
-                        slot.material = mats[key]
-        for p in ob.data.polygons:
-            p.use_smooth = True
+    _reference_materials(s, mats, objs)
     info = TruckInfo(
         type="pickup", source="reference", mount_local=[0.0, 0.0, mount_z], ground_z=-mount_z,
         roof_z=roof - mount_z, cab_back_y=cab_back, front_y=max(v.y for v in _verts_world(objs)),
@@ -1279,4 +1272,201 @@ def build_reference_truck(spec, mats, collection):
           f"removed {removed} badge/gate faces; bed floor {floor:.3f} rail {rail:.3f} roof {roof:.3f} "
           f"bed {yb_f - yb_r:.3f} (inner) x {2 * inner_hw:.3f}, rail outer hw {outer:.3f}, "
           f"axles f {y_fa - yb_f:.3f} r {y_ra - yb_f:.3f}, tire r {tire_r:.3f}, cab back {cab_back:.3f}")
+    return info
+
+
+def _reference_materials(s, mats, objs):
+    """Shared paint, library glass/trim/lamps, blank plates on the imported model."""
+    for ob in objs:
+        for slot in ob.material_slots:
+            m = slot.material
+            if m is None or m.get("render_role"):
+                continue
+            if _mat_suffix(m, s["paint_materials"]):
+                slot.material = mats["paint"]
+            elif _mat_suffix(m, s["plate_materials"]):
+                slot.material = mats["plate"]
+            else:
+                for suf, key in s["material_map"].items():
+                    if m.name.endswith("_" + suf):
+                        slot.material = mats[key]
+        for p in ob.data.polygons:
+            p.use_smooth = True
+
+
+def _cut_behind(ob, y_cut):
+    """Bisect at y = y_cut, delete everything behind it and cap the cut openings."""
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+    res = bmesh.ops.bisect_plane(bm, geom=geom, dist=1e-5, plane_co=(0, y_cut, 0), plane_no=(0, 1, 0),
+                                 clear_outer=False, clear_inner=True)
+    cut_edges = [e for e in res["geom_cut"] if isinstance(e, bmesh.types.BMEdge)]
+    bm.edges.ensure_lookup_table()
+    boundary = [e for e in cut_edges if e.is_valid and e.is_boundary]
+    if boundary:
+        filled = bmesh.ops.holes_fill(bm, edges=boundary, sides=0)
+        for f in filled["faces"]:
+            f.normal_update()
+            if f.normal.y < 0:          # caps face rearward (they are seen from behind)
+                f.normal_flip()
+    n = len(bm.faces)
+    bm.to_mesh(ob.data)
+    bm.free()
+    return n
+
+
+def _extract_faces(objs, pred, name, collection):
+    """Copy faces matching pred(centre) from every object into one new object (materials kept)."""
+    bm_out = bmesh.new()
+    mats_out = []
+    for ob in objs:
+        me = ob.data
+        sel = [p for p in me.polygons if pred(p.center)]
+        if not sel:
+            continue
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.faces.ensure_lookup_table()
+        keep = {p.index for p in sel}
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.index not in keep], context="FACES")
+        remap = []
+        for slot in ob.material_slots:
+            if slot.material not in mats_out:
+                mats_out.append(slot.material)
+            remap.append(mats_out.index(slot.material))
+        for f in bm.faces:
+            f.material_index = remap[f.material_index] if f.material_index < len(remap) else 0
+        tmp = bpy.data.meshes.new("_tmp")
+        bm.to_mesh(tmp)
+        bm.free()
+        bm_out.from_mesh(tmp)
+        bpy.data.meshes.remove(tmp)
+    me = bpy.data.meshes.new(name)
+    bm_out.to_mesh(me)
+    bm_out.free()
+    for m in mats_out:
+        me.materials.append(m)
+    ob = bpy.data.objects.new(name, me)
+    collection.objects.link(ob)
+    return ob
+
+
+def _finish_reference_cab_chassis(s, mats, collection, objs, path, k, removed, scene, dg, xc, yb_f, rail,
+                                  roof, y_fa, y_ra, z_ax, tire_r, track):
+    """Reference cab-chassis: the model cut just behind the cab, procedural frame, rear axle and
+    dual rear wheels (copies of the model's own rear wheel) at spec wheelbase."""
+    from mathutils import Matrix
+
+    from lib.common import PipelineError
+    wb = s.get("wheelbase_cc") or s.get("cab_chassis_wheelbase") or 4.30
+    frame_len = s.get("frame_length_behind_cab", 3.30)
+    frame_top = s.get("frame_top_z") or 0.80
+    fw = s.get("frame_hw", 0.56)
+    dual = s.get("dual_rear_wheels", False)
+
+    # cab back: most rearward cab point over a grid above the bed rails (the bed wall hides below)
+    hits = []
+    for ix in range(-8, 9):
+        for iz in range(1, 9):
+            z = rail + 0.03 + (roof - 0.06 - rail - 0.03) * iz / 8
+            h = _ray(scene, dg, (xc + ix * 0.09, yb_f - 1.0, z), (0, 1, 0), dist=3.0)
+            if h is not None and h.y > yb_f + 0.02:
+                hits.append(h.y)
+    if not hits:
+        raise PipelineError("reference cab_chassis: cab back not found")
+    cab_back = min(hits)
+    y_cut = cab_back - 0.012
+
+    # rear wheel template (tyre, rim, brake, centre cap) before the cut
+    def in_wheel(c, sx):
+        return (sx * (c.x - xc) > track / 2 - 0.30 and (Vector((c.y - y_ra, c.z - z_ax))).length < tire_r + 0.012)
+    templ = [_extract_faces(objs, lambda c, sx=sx: in_wheel(c, sx), f"pv_ref_rear_wheel_{'lr'[sx > 0]}", collection)
+             for sx in (-1, 1)]
+
+    faces = 0
+    keep = []
+    for ob in objs:
+        faces += _cut_behind(ob, y_cut)
+        if len(ob.data.polygons):
+            keep.append(ob)
+        else:
+            me = ob.data
+            bpy.data.objects.remove(ob)
+            bpy.data.meshes.remove(me)
+    objs = keep
+
+    # new rear axle at the spec wheelbase; duals = two copies of the model's wheel per side
+    y_new = y_fa - wb
+    wheels = []
+    for sx, t in zip((-1, 1), templ):
+        xs = [v.co.x for v in t.data.vertices]
+        wc = (min(xs) + max(xs)) / 2 - xc
+        ww = max(xs) - min(xs)
+        offs = [(sx * (track / 2 + 0.16) - wc, "o"), (sx * (track / 2 + 0.16 - ww - 0.03) - wc, "i")] if dual \
+            else [(0.0, "o")]
+        for i, (dx, tag) in enumerate(offs):
+            ob = t if i == len(offs) - 1 else bpy.data.objects.new(t.name + "_" + tag, t.data.copy())
+            if ob is not t:
+                collection.objects.link(ob)
+            ob.data.transform(Matrix.Translation((dx, y_new - y_ra, 0.0)))
+            wheels.append(ob)
+    objs += wheels
+    rear_track = (track / 2 + 0.16 + 0.14) if dual else track / 2 + 0.14
+
+    # procedural frame (C-channel rails, crossmembers), rear axle, diff, springs, shocks
+    p = Part("pv_ref_chassis", mats)
+    fh = 0.22
+    y_end = y_cut - frame_len
+    y_front = y_cut + 0.25                                   # rails run on under the cab (hidden)
+    x0 = xc
+    for sgn in (-1, 1):
+        xo, xi = x0 + sgn * fw, x0 + sgn * (fw - 0.008)
+        box(p, (min(xo, xi), y_end, frame_top - fh), (max(xo, xi), y_front, frame_top), "frame")
+        for zf in (frame_top - 0.008, frame_top - fh):
+            a, b = sorted((x0 + sgn * fw, x0 + sgn * (fw - 0.07)))
+            box(p, (a, y_end, zf), (b, y_front, zf + 0.008), "frame")
+    for kx in range(5):
+        yc = y_end + 0.03 + kx * (y_cut - 0.10 - y_end - 0.06) / 4
+        box(p, (x0 - fw + 0.01, yc - 0.04, frame_top - fh + 0.04), (x0 + fw - 0.01, yc + 0.04, frame_top - 0.04), "frame")
+    box(p, (x0 - fw - 0.01, y_end - 0.01, frame_top - fh), (x0 + fw + 0.01, y_end + 0.06, frame_top), "frame")
+    hw_axle = track / 2 + (0.16 if dual else 0.0)
+    cylinder_x(p, y_new, z_ax, 0.055, x0 - hw_axle + 0.12, x0 + hw_axle - 0.12, "frame", seg=20)
+    sph = bmesh.ops.create_uvsphere(p.bm, u_segments=20, v_segments=12, radius=0.15)
+    for v in sph["verts"]:
+        v.co = Vector((x0 + v.co.x * 0.9 + 0.08, v.co.y + y_new, v.co.z * 0.85 + z_ax))
+    p.set_mat(list({f for v in sph["verts"] for f in v.link_faces}), "frame")
+    cylinder_y(p, x0 + 0.08, z_ax + 0.02, 0.045, y_new, y_cut + 0.4, "frame", seg=16)          # driveshaft
+    for sgn in (-1, 1):
+        xs_ = x0 + sgn * (fw - 0.035)
+        for kk, t in enumerate((0.022, 0.018, 0.016)):
+            zc = frame_top - fh - 0.045 - kk * 0.022
+            box(p, (xs_ - 0.035, y_new - 0.70 + kk * 0.12, zc - t / 2), (xs_ + 0.035, y_new + 0.70 - kk * 0.12, zc + t / 2),
+                "frame")
+        box(p, (xs_ - 0.04, y_new - 0.05, z_ax - 0.06), (xs_ + 0.04, y_new + 0.05, frame_top - fh - 0.04), "frame")
+        cylinder_x(p, y_new + 0.18, (z_ax + frame_top) / 2 - 0.05, 0.025, *sorted((xs_ - sgn * 0.09, xs_ - sgn * 0.05)),
+                   "steel", seg=12)
+    # battery/under-floor pack between the rails ahead of the axle (the reference is an EV)
+    box(p, (x0 - fw + 0.08, y_new + 0.90, frame_top - fh - 0.16), (x0 + fw - 0.08, y_cut - 0.05, frame_top - fh + 0.02),
+        "underbody", bev=0.03)
+    objs.append(p.finish(collection, smooth=40))
+
+    # ---- shift: origin = frame top, centred, 7 cm behind the cab back (procedural cab_chassis frame)
+    oy = cab_back - 0.07
+    for ob in objs:
+        ob.data.transform(Matrix.Translation((-xc, -oy, 0.0)))
+        ob.location.z -= frame_top
+    mats.ground_z = -frame_top
+    _reference_materials(s, mats, objs)
+    info = TruckInfo(
+        type="cab_chassis", source="reference", mount_local=[0.0, 0.0, frame_top], ground_z=-frame_top,
+        roof_z=roof - frame_top, cab_back_y=0.07, front_y=max(v.y for v in _verts_world(objs)),
+        front_axle_y=y_fa - oy, rear_axle_y=y_new - oy, wheelbase=wb, body_hw=1.02,
+        track=track, tire_radius=tire_r, spec=s,
+        frame_top_z=0.0, frame_hw=fw, frame_end_y=y_end - oy, rear_track=rear_track, axle_z=z_ax - frame_top,
+    )
+    info["objects"] = objs
+    print(f"[reference truck] {path.name} cab_chassis: scale {k:.5f}, {faces} faces after cut at cab back "
+          f"(+{0.012:.3f}); roof {roof:.3f} above ground, frame top {frame_top:.2f}, wheelbase {wb:.2f}, "
+          f"rear track (outer tyre) {rear_track:.3f}, dual {dual}")
     return info

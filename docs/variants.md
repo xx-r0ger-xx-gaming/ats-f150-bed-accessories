@@ -97,9 +97,8 @@ exported.
 `{"type": "pickup", "source": "reference"}` swaps the procedural pickup for a downloaded model
 (default `tools/reference-truck/2023_ford_f150_lihtning_platinum.glb`, CC BY 4.0, credited in the
 README; override with `truck.model`). It is used only for preview renders: gitignored, never
-exported or packaged. `v1_shell`, `overland_canopy`, `pop_top` and `slide_in` use it; `class_c`
-stays on the procedural `cab_chassis` (the model's meshes are merged by material, so the bed, rear
-axle and wheels cannot be cleanly separated or lengthened into a dual-wheel chassis cab).
+exported or packaged. Every variant uses it: the pickups with `type: pickup`, `class_c` with
+`type: cab_chassis` (below).
 
 `build_reference_truck()` (in `proxy_truck.py`) imports the .glb with Blender's glTF importer, bakes
 the transforms, scales it to `overall_length` (5.89 m), turns it to face +Y, then:
@@ -119,12 +118,22 @@ the transforms, scales it to `overall_length` (5.89 m), turns it to face +Y, the
   3.70 m.
 - `tailgate`: `closed` or `removed` (deletes the gate faces between the bed sides); `down` is
   procedural-only.
+- `type: cab_chassis`: after measuring, every mesh is bisected 12 mm behind the cab back (the most
+  rearward cab point over a ray grid above the rails) and everything behind is deleted (bed,
+  tailgate, rear bumper, rear wheels); cut openings are capped. The model's own rear wheel (tyre,
+  rim, brake, centre cap) is copied to the new rear axle at `wheelbase_cc` (two per side with
+  `dual_rear_wheels`), and procedural C-channel frame rails, crossmembers, axle housing, diff,
+  springs, shocks and an under-floor pack are added (frame top `frame_top_z`, default 0.80 m). The
+  frame is the procedural cab_chassis one: origin = frame top, 7 cm behind the cab back. `cab` is
+  ignored (the model is a crew cab); `class_c` uses `wheelbase_cc` 5.3 so its rear overhang matches
+  the regular-cab procedural layout.
 
 Missing file: rendering stops with the download instructions (see `docs/gaming-pc-setup.md`). Drop
 `source` (or use `--set truck.source=procedural`) to render on the procedural pickup.
 
 Reference renders of the bare bases: `--variant _ref_pickup` (reference model),
-`--variant _ref_pickup_procedural`, `--variant _ref_cab_chassis`.
+`--variant _ref_pickup_procedural`, `--variant _ref_cab_chassis` (procedural; add
+`--set truck.source=reference` for the reference cab-chassis).
 
 ### Module (`scripts/variants/<module>.py`)
 
@@ -243,7 +252,9 @@ auto-framed cameras (`place_camera`), render profiles (`configure_render`, compo
   rear wheel opening.
 - `class_c`: windows are cut into both body halves (pocket + pane + frame + seal), decals are
   trimmed by the same cutter, entry door has a paddle handle, hinges and a two-tread folding step;
-  the wraparound cabover glass has an eyebrow and a sill for depth. Procedural cab_chassis only.
+  the wraparound cabover glass has an eyebrow and a sill for depth. On the reference cab-chassis the
+  cabover underside is 0.115 m above the cab roof and the coach front wall 2 cm behind the cab back;
+  `--set truck.source=procedural` renders it on the procedural regular-cab chassis.
 
 Measured on the Surface Pro 8 (i7-1185G7, 2026-10-14, `--all`, 6 poses x 3 views, one Blender):
 `surface-photo` 116 to 156 s per 1280x720 view, 2394 s (~40 min) for all 18; `surface` (Eevee)

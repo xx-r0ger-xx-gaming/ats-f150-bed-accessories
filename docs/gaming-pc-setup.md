@@ -24,7 +24,7 @@ Check: `python scripts\preflight.py --stage deploy` (all PASS except possibly th
 
 ### Reference truck for preview renders (manual)
 
-The pickup render variants use a third-party model as the base truck (render-only; never committed,
+The render variants use a third-party model as the base truck (render-only; never committed,
 exported or packaged; credit in the README). It cannot be fetched by script (Sketchfab needs a
 login):
 
@@ -32,7 +32,7 @@ login):
 2. Download > glTF > **glTF Binary (.glb)** (about 48 MB).
 3. Save it as `tools\reference-truck\2023_ford_f150_lihtning_platinum.glb` (create the folder).
 
-Without it, rendering a pickup variant stops with these instructions; use
+Without it, rendering a variant stops with these instructions; use
 `--set truck.source=procedural` to render on the procedural stand-in instead.
 
 ## 3. Extract the Road Trip DLC definitions (private)

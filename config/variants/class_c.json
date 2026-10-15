@@ -12,10 +12,12 @@
     "door_side": 1,
     "bikes": 2
   },
+  "_truck_comment": "source reference = the downloaded crew-cab model cut behind the cab (render-only); its crew cab sets the cab length, so 'cab' only applies to the procedural fallback. wheelbase_cc 5.3 keeps the rear overhang close to the procedural regular-cab layout (4.5).",
   "truck": {
     "type": "cab_chassis",
+    "source": "reference",
     "cab": "regular",
-    "wheelbase_cc": 4.5,
+    "wheelbase_cc": 5.3,
     "frame_length_behind_cab": 3.6,
     "dual_rear_wheels": true
   },
