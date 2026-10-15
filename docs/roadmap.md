@@ -36,6 +36,17 @@ Deliverables: reproducible .blend source, scripts/configuration, V1 mod package,
 
 Deliverables: design decision, new source/configuration, tested variants, renders and updated compatibility/provenance reports.
 
+## Phase 2b — Animated pop-top (after V1)
+
+Goal: park, set the parking brake, and the pop-top lid rises over a few seconds; release the brake and it lowers before driving, so the roof is never up on the road. Rudimentary is fine: one lid part moving vertically with the canvas walls scaling/unfolding underneath (the existing open and closed poses are the end states).
+
+- [ ] Gate (gaming PC): confirm whether car accessories (`def/vehicle/car/`) in Road Trip support animated accessories, and which triggers exist (parking brake, beacon/light switch, speed). UNVERIFIED; truck mods commonly use parking brake or beacon triggers, but cars may differ.
+- [ ] If supported: author the lid animation, tie open to parking brake on, close on release; add a speed > 0 close as a backstop if speed is an available input.
+- [ ] If not supported: ship open and closed as separate accessory variants swapped in the garage, and document the limitation.
+- [ ] Test: no clipping through the cab or rack at any frame, closed state on load, behaviour after save/reload.
+
+Deliverables: trigger evidence from the extracted defs, animation source, in-game test notes or the documented static fallback.
+
 ## Phase 3 — F-150-cab-based Class C RV
 
 - [ ] Design an original habitation body and over-cab berth while reusing supported cab/interior/drivetrain references.

@@ -99,3 +99,4 @@ Dealer data for the 2023 F-150 (https://www.greghublerford.com/2023-ford-f-150-b
 | 5 | Real bed dimensions and origin/axes | Measure the F-150 bed model or locators in Blender after import; update `config/v1.json` |
 | 6 | Blender Tools 2.4.1 and Conversion Tools 2.21 handle Road Trip assets | Import the vehicle model, export a tiny original mesh, convert, load in game |
 | 7 | manifest.sii fields, icon and preview sizes, ATS build | Check a working Workshop mod's manifest, the Uploader validator output, and the in-game version string |
+| 8 | Animated accessories on cars (Phase 2b pop-top): supported at all, and which triggers (parking brake, beacon, speed) | Search the extracted F-150 and other car defs for animated addons and their controller/trigger fields; compare with an animated truck-accessory mod |
