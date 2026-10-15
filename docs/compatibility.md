@@ -42,7 +42,7 @@ Status: OBSERVED-IN-MODS. Read from the text definitions of two community mods f
 
 - **Vehicle type is a car, not a truck:** def root `def/vehicle/car/ford.f150_23/` with subfolders `chassis`, `engine`, `transmission`, `cabin`, `interior`, `paint_job`, `head_light`, `accessory/<slot>`, plus `data.sii` and `lamp_setup.sii`.
 - **Unit naming:** `<id>.ford.f150_23.<type>`.
-- **Chassis:** only 4-door, 5.5 ft bed, AWD is present: unit `4d55_awd.ford.f150_23.chassis` (chassis file `4doors_55_awd.sii`).
+- **Chassis:** only 4-door, 5.5 ft bed, AWD is present: unit `4d55_awd.ford.f150_23.chassis` (chassis file `4doors_55_awd.sii`). No regular cab or chassis cab, which is why the Class C (separate repo, ats-f150-class-c) needs its own chassis.
 - **Cabin:** unit `pckup4d_55.ford.f150_23.cabin` (cabin file `pickup_4doors_55.sii`).
 - **Interior:** Lariat.
 - **Dealer def:** `def/vehicle/car_dealer/ford/ford_f150_23.sii`. Lists `vehicle : .car` with `vehicle_accessory`, `vehicle_addon_accessory` and `vehicle_wheel_accessory` units, each with `data_path`, `slot_name`, `slot_hookup`.

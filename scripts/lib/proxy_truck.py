@@ -4,12 +4,9 @@ Never exported, never packaged; context for preview renders only. It is not a ga
 manufacturer model: only approximate published overall proportions of a full-size crew-cab
 pickup. No logos, ovals, lettering or badges anywhere.
 
-Two body types (spec["type"]):
-  pickup       - 4-door crew cab, 5.5 ft bed with tailgate (spec["tailgate"]: closed | down |
-                 removed), wheelbase ~3.68 m
-  cab_chassis  - same cab/front end, no bed, longer wheelbase (default 4.3 m), exposed frame rails
-                 behind the cab, optional dual rear wheels (spec["dual_rear_wheels"]) - the base for
-                 a Class C motorhome body.
+Body type (spec["type"]): pickup only - crew (4-door) or regular (2-door) cab, 5.5 ft bed with
+tailgate (spec["tailgate"]: closed | down | removed), wheelbase ~3.68 m. (The cab_chassis base for
+the Class C motorhome moved to the ats-f150-class-c repo.)
 
 Construction: body panels are lofted cross-sections (tumblehome, shoulder crease, tuck-under),
 bevelled caps, EXACT-boolean wheel arches and panel gaps, weighted normals for clean shading.
@@ -34,7 +31,7 @@ from lib.meshkit import (
 COLLECTION = "preview_context"
 
 DEFAULTS = {
-    "type": "pickup",                 # pickup | cab_chassis
+    "type": "pickup",                 # pickup only (cab_chassis lives in ats-f150-class-c)
     "cab": "crew",                    # crew (4 doors) | regular (2 doors, cab 0.72 m shorter)
     "windshield_rake": None,          # horizontal run of the windshield; None -> 0.80 crew / 0.70 regular
     "body_hw": 0.99,                  # half body width at the shoulder (flares reach ~1.015)
@@ -43,7 +40,6 @@ DEFAULTS = {
     "front_y": 4.00,
     "front_axle_y": 2.94,
     "wheelbase": 3.68,                # pickup
-    "cab_chassis_wheelbase": 4.30,    # used when type == cab_chassis (unless wheelbase_cc given)
     "rail_z": 1.44,                   # bed rail top above ground (pickup mount height)
     "belt_z": 1.43,
     "roof_z": 1.94,
@@ -56,10 +52,8 @@ DEFAULTS = {
     "track": 1.70,
     "spokes": 6,                      # split spokes (2 blades each)
     "wheel_finish": "alloy_dark",     # material key for the wheel face
-    "frame_top_z": None,              # None -> 0.62 pickup / 0.80 cab_chassis
+    "frame_top_z": 0.62,              # frame rail top above ground
     "frame_hw": 0.56,                 # outer face of the frame rails
-    "frame_length_behind_cab": 3.30,  # cab_chassis: rails run from y = 0 to y = -this
-    "dual_rear_wheels": False,
     "tailgate": "closed",             # pickup: closed | down (open, level with the bed floor) | removed
 }
 
@@ -72,8 +66,7 @@ class TruckInfo(dict):
 
     type, mount_local (mount in truck-local coords), ground_z, roof_z, cab_back_y, front_y,
     front_axle_y, rear_axle_y, wheelbase, body_hw, track, tire_radius,
-    pickup:      rail_z (=0), bed_length, bed_inner_hw, rail_outer_hw, tailgate_y (bed end), tailgate
-    cab_chassis: frame_top_z (=0), frame_hw, frame_end_y, rear_track (outer tyre edge half width)
+    rail_z (=0), bed_length, bed_inner_hw, rail_outer_hw, tailgate_y (bed end), tailgate
     objects: list of truck objects (not serialised).
     """
 
@@ -81,12 +74,8 @@ class TruckInfo(dict):
 def make_spec(overrides=None):
     s = dict(DEFAULTS)
     s.update({k: v for k, v in (overrides or {}).items() if not k.startswith("_") and k not in ("source", "model")})
-    if s["type"] not in ("pickup", "cab_chassis"):
-        raise ValueError(f"truck type must be pickup|cab_chassis, got {s['type']}")
-    if s["frame_top_z"] is None:
-        s["frame_top_z"] = 0.62 if s["type"] == "pickup" else 0.80
-    if s["type"] == "cab_chassis":
-        s["wheelbase"] = s.get("wheelbase_cc") or s["cab_chassis_wheelbase"]
+    if s["type"] != "pickup":
+        raise ValueError(f"truck type must be pickup (cab_chassis moved to ats-f150-class-c), got {s['type']}")
     if s["tailgate"] not in ("closed", "down", "removed"):
         raise ValueError(f"truck tailgate must be closed|down|removed, got {s['tailgate']}")
     if s["cab"] not in ("crew", "regular"):
@@ -196,7 +185,6 @@ class Geo:
         self.arch_z = self.R + 0.025
         self.track_hw = s["track"] / 2
         self.bed_rear = -s["bed_length"]
-        self.pickup = s["type"] == "pickup"
         self.cab_kw = dict(zs=1.17, tumble=0.04, ztuck=0.72, tuck=0.045, lip=0.011)
         self.bed_kw = dict(zs=1.17, tumble=0.018, ztuck=0.80, tuck=0.035, lip=0.011)
 
@@ -665,7 +653,7 @@ def build_sides(g, mats, col, gh):
         oriented_box(p, hc + Vector((sgn * 0.01, 0.0, -0.13)), (X, Y, Z), (0.16, 0.08, 0.012), "lamp_amber",
                      bev=0.004)
         # tubular-look running board (flat step with rounded nose)
-        y0 = (g.y_ra + g.arch_r + 0.10) if g.pickup else (s["cab_back_y"] + 0.02)
+        y0 = g.y_ra + g.arch_r + 0.10
         y1 = g.y_fa - g.arch_r - 0.08
         xo = sgn * (W + 0.03)
         xi = sgn * (W - 0.20)
@@ -679,9 +667,8 @@ def build_sides(g, mats, col, gh):
         a, b = sorted((sgn * (xr - 0.04), sgn * (xr + 0.006)))
         box(p, (a, s["cab_back_y"] + 0.02, zb - 0.01), (b, gh.yf0 - 0.10, zb + 0.07), "trim", bev=0.008)
         # arch lips (body colour) + liners
-        axles = [(g.y_fa, s["rocker_z"], g.cab_kw, s["belt_z"])]
-        if g.pickup:
-            axles.append((g.y_ra, s["bed_bottom_z"], g.bed_kw, s["rail_z"]))
+        axles = [(g.y_fa, s["rocker_z"], g.cab_kw, s["belt_z"]),
+                 (g.y_ra, s["bed_bottom_z"], g.bed_kw, s["rail_z"])]
         for ya, zbb, kw, ztop in axles:
             amin = math.degrees(math.asin(max(-1.0, min(1.0, (zbb - g.arch_z) / g.arch_r)))) + 1.5
             xsurf = surface_x(W, zbb, ztop, g.arch_z + g.arch_r * 0.7, **kw)
@@ -747,9 +734,9 @@ def build_chassis(g, mats, col):
     s = g.s
     p = Part("pv_chassis", mats)
     ft = s["frame_top_z"]
-    fh = 0.22 if not g.pickup else 0.20
+    fh = 0.20
     fw = s["frame_hw"]
-    y_end = (g.bed_rear - 0.10) if g.pickup else -s["frame_length_behind_cab"]
+    y_end = g.bed_rear - 0.10
     y_front = s["front_y"] - 0.30
     for sgn in (-1, 1):                         # C-channel rails (web + flanges, opening inward)
         xo, xi = sgn * fw, sgn * (fw - 0.008)
@@ -757,15 +744,14 @@ def build_chassis(g, mats, col):
         for zf in (ft - 0.008, ft - fh):
             a, b = sorted((sgn * fw, sgn * (fw - 0.07)))
             box(p, (a, y_end, zf), (b, y_front, zf + 0.008), "frame")
-    n_cross = 5 if not g.pickup else 3
+    n_cross = 3
     for k in range(n_cross):
         yc = y_end + 0.03 + k * (min(0.0, y_front) - y_end - 0.06) / max(n_cross - 1, 1)
         box(p, (-fw + 0.01, yc - 0.04, ft - fh + 0.04), (fw - 0.01, yc + 0.04, ft - 0.04), "frame")
     box(p, (-fw - 0.01, y_end - 0.01, ft - fh), (fw + 0.01, y_end + 0.06, ft), "frame")      # end crossmember
     # rear axle: housing, diff, leaf springs, shocks
     ra = g.y_ra
-    dual = s["dual_rear_wheels"] and not g.pickup
-    hw_axle = g.track_hw + (0.20 if dual else 0.0)
+    hw_axle = g.track_hw
     cylinder_x(p, ra, g.R, 0.055, -hw_axle + 0.12, hw_axle - 0.12, "frame", seg=20)
     sph = bmesh.ops.create_uvsphere(p.bm, u_segments=20, v_segments=12, radius=0.15)
     for v in sph["verts"]:
@@ -783,28 +769,15 @@ def build_chassis(g, mats, col):
                    "steel", seg=12)
     # front suspension/axle (dark), fuel tank, exhaust
     cylinder_x(p, g.y_fa, g.R, 0.05, -g.track_hw + 0.12, g.track_hw - 0.12, "frame", seg=16)
-    if g.pickup:
-        box(p, (0.10, -0.10, ft - fh - 0.18), (fw - 0.08, 0.95, ft - fh + 0.04), "underbody", bev=0.03)
-        cylinder_z(p, 0.0, g.bed_rear + 0.48, g.R - 0.03, 0.36, 0.60, "tire", seg=32)  # spare, flat
-    else:
-        box(p, (-fw + 0.08, -1.00, ft - fh - 0.16), (fw - 0.08, -0.15, ft - fh + 0.02), "underbody",
-            bev=0.03)
-    ex_end = (g.bed_rear - 0.05) if g.pickup else (y_end + 0.6)
+    box(p, (0.10, -0.10, ft - fh - 0.18), (fw - 0.08, 0.95, ft - fh + 0.04), "underbody", bev=0.03)
+    cylinder_z(p, 0.0, g.bed_rear + 0.48, g.R - 0.03, 0.36, 0.60, "tire", seg=32)  # spare, flat
+    ex_end = g.bed_rear - 0.05
     cylinder_y(p, fw + 0.05, 0.40, 0.035, ex_end, 2.2, "steel", seg=14)
     cylinder_y(p, fw + 0.05, 0.40, 0.042, ex_end - 0.01, ex_end + 0.12, "chrome", seg=14)
     # under-cab floor pan (blocks sky leaking under the body)
     box(p, (-0.95, s["cab_back_y"] - 0.02, s["rocker_z"] + 0.02), (0.95, s["front_y"] - 0.35, s["rocker_z"] + 0.04),
         "underbody")
     box(p, (-0.70, g.y_fa - 0.45, 0.36), (0.70, s["front_y"] - 0.15, 0.62), "underbody", bev=0.03)
-    return p.finish(col, smooth=40)
-
-
-def build_cab_back_extras(g, mats, col):
-    """cab_chassis only: cab back panel trim so the exposed back reads as a real cab."""
-    s = g.s
-    p = Part("pv_cab_back", mats)
-    yb = s["cab_back_y"]
-    box(p, (-0.60, yb - 0.01, 0.62), (0.60, yb + 0.005, 0.70), "trim", bev=0.005)
     return p.finish(col, smooth=40)
 
 
@@ -903,31 +876,21 @@ def build_truck(spec, mats, collection=None):
         raise ValueError(f"truck source must be procedural|reference, got {spec.get('source')}")
     s = make_spec(spec)
     g = Geo(s)
-    mats.ground_z = -(s["rail_z"] if g.pickup else s["frame_top_z"])   # world z of the road (dirt)
+    mats.ground_z = -s["rail_z"]                                      # world z of the road (dirt)
     mats.add("grille", _grille_material(mats))
     objs = [build_cab_body(g, mats, collection)]
     gh_objs, gh = build_greenhouse(g, mats, collection)
     objs += gh_objs
     objs += [build_front(g, mats, collection), build_sides(g, mats, collection, gh),
              build_chassis(g, mats, collection)]
-    if g.pickup:
-        objs += build_bed(g, mats, collection)
-        objs.append(build_rear(g, mats, collection))
-    else:
-        objs.append(build_cab_back_extras(g, mats, collection))
+    objs += build_bed(g, mats, collection)
+    objs.append(build_rear(g, mats, collection))
     for sgn, sd in ((-1, "l"), (1, "r")):
         objs.append(build_wheel(g, mats, collection, f"pv_wheel_f{sd}", g.y_fa, sgn * g.track_hw, sgn,
                                 finish=s["wheel_finish"]))
-        if s["dual_rear_wheels"] and not g.pickup:
-            w = 0.245
-            for k, off in enumerate((-(w / 2 + 0.015), (w / 2 + 0.015))):
-                xc = sgn * (g.track_hw + 0.20 + off)
-                objs.append(build_wheel(g, mats, collection, f"pv_wheel_r{sd}{k}", g.y_ra, xc, sgn, width=w,
-                                        finish=s["wheel_finish"], inner=(k == 0)))
-        else:
-            objs.append(build_wheel(g, mats, collection, f"pv_wheel_r{sd}", g.y_ra, sgn * g.track_hw, sgn,
-                                    finish=s["wheel_finish"]))
-    mount = Vector((0.0, 0.0, s["rail_z"] if g.pickup else s["frame_top_z"]))
+        objs.append(build_wheel(g, mats, collection, f"pv_wheel_r{sd}", g.y_ra, sgn * g.track_hw, sgn,
+                                finish=s["wheel_finish"]))
+    mount = Vector((0.0, 0.0, s["rail_z"]))
     for ob in objs:
         ob.location -= mount
     info = TruckInfo(
@@ -935,14 +898,9 @@ def build_truck(spec, mats, collection=None):
         cab_back_y=s["cab_back_y"], front_y=s["front_y"], front_axle_y=g.y_fa, rear_axle_y=g.y_ra,
         wheelbase=s["wheelbase"], body_hw=g.W, track=s["track"], tire_radius=g.R, spec=s,
     )
-    if g.pickup:
-        info.update(rail_z=0.0, bed_length=s["bed_length"], bed_inner_hw=g.W - 0.15,
-                    rail_outer_hw=surface_x(g.W, s["bed_bottom_z"], s["rail_z"], s["rail_z"] - 0.03, **g.bed_kw),
-                    tailgate_y=g.bed_rear, tailgate=s["tailgate"])
-    else:
-        dual = s["dual_rear_wheels"]
-        info.update(frame_top_z=0.0, frame_hw=s["frame_hw"], frame_end_y=-s["frame_length_behind_cab"],
-                    rear_track=(g.track_hw + (0.20 + 0.245 + 0.015 if dual else s["tire_width"] / 2)))
+    info.update(rail_z=0.0, bed_length=s["bed_length"], bed_inner_hw=g.W - 0.15,
+                rail_outer_hw=surface_x(g.W, s["bed_bottom_z"], s["rail_z"], s["rail_z"] - 0.03, **g.bed_kw),
+                tailgate_y=g.bed_rear, tailgate=s["tailgate"])
     info["objects"] = objs
     return info
 
@@ -1118,8 +1076,9 @@ def build_reference_truck(spec, mats, collection):
     s = dict(REFERENCE_DEFAULTS)
     s.update({k: v for k, v in spec.items() if not k.startswith("_")})
     s.setdefault("type", "pickup")
-    if s["type"] not in ("pickup", "cab_chassis"):
-        raise PipelineError(f"reference truck: type must be pickup|cab_chassis, got {s['type']}")
+    if s["type"] != "pickup":
+        raise PipelineError(f"reference truck: type must be pickup (cab_chassis moved to ats-f150-class-c), "
+                            f"got {s['type']}")
     if s.get("tailgate", "closed") not in ("closed", "removed"):
         raise PipelineError("reference truck: tailgate must be closed|removed")
     s.setdefault("tailgate", "closed")
@@ -1245,10 +1204,6 @@ def build_reference_truck(spec, mats, collection):
             removed += _delete_faces(ob, lambda m, c: all(lo_b[i] + (yb_f if i == 1 else 0) <= c[i] <= hi_b[i] + (yb_f if i == 1 else 0)
                                                           for i in range(3)))
 
-    if s["type"] == "cab_chassis":
-        return _finish_reference_cab_chassis(s, mats, collection, objs, path, k, removed, scene, dg, xc, yb_f,
-                                             rail, roof, y_fa, y_ra, z_ax, tire_r, track)
-
     # ---- shift: y = 0 at the bed front wall (inner face), mount = rail top
     mount_z = rail
     shift = Matrix.Translation((-xc, -yb_f, 0.0))
@@ -1292,181 +1247,3 @@ def _reference_materials(s, mats, objs):
                         slot.material = mats[key]
         for p in ob.data.polygons:
             p.use_smooth = True
-
-
-def _cut_behind(ob, y_cut):
-    """Bisect at y = y_cut, delete everything behind it and cap the cut openings."""
-    bm = bmesh.new()
-    bm.from_mesh(ob.data)
-    geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
-    res = bmesh.ops.bisect_plane(bm, geom=geom, dist=1e-5, plane_co=(0, y_cut, 0), plane_no=(0, 1, 0),
-                                 clear_outer=False, clear_inner=True)
-    cut_edges = [e for e in res["geom_cut"] if isinstance(e, bmesh.types.BMEdge)]
-    bm.edges.ensure_lookup_table()
-    boundary = [e for e in cut_edges if e.is_valid and e.is_boundary]
-    if boundary:
-        filled = bmesh.ops.holes_fill(bm, edges=boundary, sides=0)
-        for f in filled["faces"]:
-            f.normal_update()
-            if f.normal.y < 0:          # caps face rearward (they are seen from behind)
-                f.normal_flip()
-    n = len(bm.faces)
-    bm.to_mesh(ob.data)
-    bm.free()
-    return n
-
-
-def _extract_faces(objs, pred, name, collection):
-    """Copy faces matching pred(centre) from every object into one new object (materials kept)."""
-    bm_out = bmesh.new()
-    mats_out = []
-    for ob in objs:
-        me = ob.data
-        sel = [p for p in me.polygons if pred(p.center)]
-        if not sel:
-            continue
-        bm = bmesh.new()
-        bm.from_mesh(me)
-        bm.faces.ensure_lookup_table()
-        keep = {p.index for p in sel}
-        bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.index not in keep], context="FACES")
-        remap = []
-        for slot in ob.material_slots:
-            if slot.material not in mats_out:
-                mats_out.append(slot.material)
-            remap.append(mats_out.index(slot.material))
-        for f in bm.faces:
-            f.material_index = remap[f.material_index] if f.material_index < len(remap) else 0
-        tmp = bpy.data.meshes.new("_tmp")
-        bm.to_mesh(tmp)
-        bm.free()
-        bm_out.from_mesh(tmp)
-        bpy.data.meshes.remove(tmp)
-    me = bpy.data.meshes.new(name)
-    bm_out.to_mesh(me)
-    bm_out.free()
-    for m in mats_out:
-        me.materials.append(m)
-    ob = bpy.data.objects.new(name, me)
-    collection.objects.link(ob)
-    return ob
-
-
-def _finish_reference_cab_chassis(s, mats, collection, objs, path, k, removed, scene, dg, xc, yb_f, rail,
-                                  roof, y_fa, y_ra, z_ax, tire_r, track):
-    """Reference cab-chassis: the model cut just behind the cab, procedural frame, rear axle and
-    dual rear wheels (copies of the model's own rear wheel) at spec wheelbase."""
-    from mathutils import Matrix
-
-    from lib.common import PipelineError
-    wb = s.get("wheelbase_cc") or s.get("cab_chassis_wheelbase") or 4.30
-    frame_len = s.get("frame_length_behind_cab", 3.30)
-    frame_top = s.get("frame_top_z") or 0.80
-    fw = s.get("frame_hw", 0.56)
-    dual = s.get("dual_rear_wheels", False)
-
-    # cab back: most rearward cab point over a grid above the bed rails (the bed wall hides below)
-    hits = []
-    for ix in range(-8, 9):
-        for iz in range(1, 9):
-            z = rail + 0.03 + (roof - 0.06 - rail - 0.03) * iz / 8
-            h = _ray(scene, dg, (xc + ix * 0.09, yb_f - 1.0, z), (0, 1, 0), dist=3.0)
-            if h is not None and h.y > yb_f + 0.02:
-                hits.append(h.y)
-    if not hits:
-        raise PipelineError("reference cab_chassis: cab back not found")
-    cab_back = min(hits)
-    y_cut = cab_back - 0.012
-
-    # rear wheel template (tyre, rim, brake, centre cap) before the cut
-    def in_wheel(c, sx):
-        return (sx * (c.x - xc) > track / 2 - 0.30 and (Vector((c.y - y_ra, c.z - z_ax))).length < tire_r + 0.012)
-    templ = [_extract_faces(objs, lambda c, sx=sx: in_wheel(c, sx), f"pv_ref_rear_wheel_{'lr'[sx > 0]}", collection)
-             for sx in (-1, 1)]
-
-    faces = 0
-    keep = []
-    for ob in objs:
-        faces += _cut_behind(ob, y_cut)
-        if len(ob.data.polygons):
-            keep.append(ob)
-        else:
-            me = ob.data
-            bpy.data.objects.remove(ob)
-            bpy.data.meshes.remove(me)
-    objs = keep
-
-    # new rear axle at the spec wheelbase; duals = two copies of the model's wheel per side
-    y_new = y_fa - wb
-    wheels = []
-    for sx, t in zip((-1, 1), templ):
-        xs = [v.co.x for v in t.data.vertices]
-        wc = (min(xs) + max(xs)) / 2 - xc
-        ww = max(xs) - min(xs)
-        offs = [(sx * (track / 2 + 0.16) - wc, "o"), (sx * (track / 2 + 0.16 - ww - 0.03) - wc, "i")] if dual \
-            else [(0.0, "o")]
-        for i, (dx, tag) in enumerate(offs):
-            ob = t if i == len(offs) - 1 else bpy.data.objects.new(t.name + "_" + tag, t.data.copy())
-            if ob is not t:
-                collection.objects.link(ob)
-            ob.data.transform(Matrix.Translation((dx, y_new - y_ra, 0.0)))
-            wheels.append(ob)
-    objs += wheels
-    rear_track = (track / 2 + 0.16 + 0.14) if dual else track / 2 + 0.14
-
-    # procedural frame (C-channel rails, crossmembers), rear axle, diff, springs, shocks
-    p = Part("pv_ref_chassis", mats)
-    fh = 0.22
-    y_end = y_cut - frame_len
-    y_front = y_cut + 0.25                                   # rails run on under the cab (hidden)
-    x0 = xc
-    for sgn in (-1, 1):
-        xo, xi = x0 + sgn * fw, x0 + sgn * (fw - 0.008)
-        box(p, (min(xo, xi), y_end, frame_top - fh), (max(xo, xi), y_front, frame_top), "frame")
-        for zf in (frame_top - 0.008, frame_top - fh):
-            a, b = sorted((x0 + sgn * fw, x0 + sgn * (fw - 0.07)))
-            box(p, (a, y_end, zf), (b, y_front, zf + 0.008), "frame")
-    for kx in range(5):
-        yc = y_end + 0.03 + kx * (y_cut - 0.10 - y_end - 0.06) / 4
-        box(p, (x0 - fw + 0.01, yc - 0.04, frame_top - fh + 0.04), (x0 + fw - 0.01, yc + 0.04, frame_top - 0.04), "frame")
-    box(p, (x0 - fw - 0.01, y_end - 0.01, frame_top - fh), (x0 + fw + 0.01, y_end + 0.06, frame_top), "frame")
-    hw_axle = track / 2 + (0.16 if dual else 0.0)
-    cylinder_x(p, y_new, z_ax, 0.055, x0 - hw_axle + 0.12, x0 + hw_axle - 0.12, "frame", seg=20)
-    sph = bmesh.ops.create_uvsphere(p.bm, u_segments=20, v_segments=12, radius=0.15)
-    for v in sph["verts"]:
-        v.co = Vector((x0 + v.co.x * 0.9 + 0.08, v.co.y + y_new, v.co.z * 0.85 + z_ax))
-    p.set_mat(list({f for v in sph["verts"] for f in v.link_faces}), "frame")
-    cylinder_y(p, x0 + 0.08, z_ax + 0.02, 0.045, y_new, y_cut + 0.4, "frame", seg=16)          # driveshaft
-    for sgn in (-1, 1):
-        xs_ = x0 + sgn * (fw - 0.035)
-        for kk, t in enumerate((0.022, 0.018, 0.016)):
-            zc = frame_top - fh - 0.045 - kk * 0.022
-            box(p, (xs_ - 0.035, y_new - 0.70 + kk * 0.12, zc - t / 2), (xs_ + 0.035, y_new + 0.70 - kk * 0.12, zc + t / 2),
-                "frame")
-        box(p, (xs_ - 0.04, y_new - 0.05, z_ax - 0.06), (xs_ + 0.04, y_new + 0.05, frame_top - fh - 0.04), "frame")
-        cylinder_x(p, y_new + 0.18, (z_ax + frame_top) / 2 - 0.05, 0.025, *sorted((xs_ - sgn * 0.09, xs_ - sgn * 0.05)),
-                   "steel", seg=12)
-    # battery/under-floor pack between the rails ahead of the axle (the reference is an EV)
-    box(p, (x0 - fw + 0.08, y_new + 0.90, frame_top - fh - 0.16), (x0 + fw - 0.08, y_cut - 0.05, frame_top - fh + 0.02),
-        "underbody", bev=0.03)
-    objs.append(p.finish(collection, smooth=40))
-
-    # ---- shift: origin = frame top, centred, 7 cm behind the cab back (procedural cab_chassis frame)
-    oy = cab_back - 0.07
-    for ob in objs:
-        ob.data.transform(Matrix.Translation((-xc, -oy, 0.0)))
-        ob.location.z -= frame_top
-    mats.ground_z = -frame_top
-    _reference_materials(s, mats, objs)
-    info = TruckInfo(
-        type="cab_chassis", source="reference", mount_local=[0.0, 0.0, frame_top], ground_z=-frame_top,
-        roof_z=roof - frame_top, cab_back_y=0.07, front_y=max(v.y for v in _verts_world(objs)),
-        front_axle_y=y_fa - oy, rear_axle_y=y_new - oy, wheelbase=wb, body_hw=1.02,
-        track=track, tire_radius=tire_r, spec=s,
-        frame_top_z=0.0, frame_hw=fw, frame_end_y=y_end - oy, rear_track=rear_track, axle_z=z_ax - frame_top,
-    )
-    info["objects"] = objs
-    print(f"[reference truck] {path.name} cab_chassis: scale {k:.5f}, {faces} faces after cut at cab back "
-          f"(+{0.012:.3f}); roof {roof:.3f} above ground, frame top {frame_top:.2f}, wheelbase {wb:.2f}, "
-          f"rear track (outer tyre) {rear_track:.3f}, dual {dual}")
-    return info

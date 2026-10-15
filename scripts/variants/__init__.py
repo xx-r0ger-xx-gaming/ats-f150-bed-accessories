@@ -10,7 +10,7 @@ A variant module is scripts/variants/<module>.py exposing
     collection - bpy collection to link every created object into.
     mats       - lib.materials.MaterialLibrary; mats["paint"] is the colour-matched body paint.
 
-Optional module attributes: TRUCK_TYPES = ("pickup",) / ("cab_chassis",) / both (validated),
+Optional module attributes: TRUCK_TYPES = ("pickup",) (validated; cab_chassis lives in ats-f150-class-c),
 DESCRIPTION = "one line".
 
 Modules are found by file name (variants.<module>), or registered explicitly with
@@ -23,7 +23,7 @@ from pathlib import Path
 _REGISTRY = {}
 
 
-def register(name, truck_types=("pickup", "cab_chassis")):
+def register(name, truck_types=("pickup",)):
     """Decorator: register a build function under `name` (alternative to one module per name)."""
     def deco(fn):
         _REGISTRY[name] = (fn, tuple(truck_types))
@@ -48,5 +48,5 @@ def get(name):
             build = getattr(mod, "build", None)
             if not callable(build):
                 raise KeyError(f"variants/{name}.py has no build(cfg, collection, mats)")
-            _REGISTRY[name] = (build, tuple(getattr(mod, "TRUCK_TYPES", ("pickup", "cab_chassis"))))
+            _REGISTRY[name] = (build, tuple(getattr(mod, "TRUCK_TYPES", ("pickup",))))
     return _REGISTRY[name]

@@ -4,13 +4,13 @@ Project brief recorded October 14, 2026. Start with [CLAUDE.md](CLAUDE.md), then
 
 ## Design intent
 
-Build an original camper mod for the Ford F-150 available in the intended ATS Road Trip setup. V1 is a removable, color-matched bed camper shell accessory. Later versions explore a pop-top/slide-in camper and an F-150-cab-based Class C RV with an over-cab sleeping area and rear habitation body.
+Build an original camper mod for the Ford F-150 available in the intended ATS Road Trip setup. V1 is a removable, color-matched bed camper shell accessory. Later versions explore a pop-top/slide-in camper and other bed accessories. The F-150-cab-based Class C motorhome needs its own chassis, so it moved to its own repo, [ats-f150-class-c](https://github.com/xx-r0ger-xx-gaming/ats-f150-class-c), on October 15, 2026.
 
-Reuse the installed vehicle's drivetrain, interior, controls, and physics through supported references where possible. This is a design goal, not a verified capability. The Class C body may require different chassis dimensions, collision, camera placement, and handling; evaluate those before describing it as cosmetic only.
+Reuse the installed vehicle's drivetrain, interior, controls, and physics through supported references where possible. This is a design goal, not a verified capability.
 
 ## Concept reference
 
-User-supplied visual reference from the prior design conversation, added October 14, 2026. It is kept private at `local-reference/f150-camper-concept.png` (gitignored) because it contains third-party logos; copy it there manually on each machine. It shows a color-matched shell, overland canopy, pop-top, slide-in camper, and a small truck-based Class C camper with interior/rear views. The project targets a compact F-150-based camper. This is visual inspiration, not measured geometry, proof of game support, or a distributable game asset; it must never be included in a mod package. The overland canopy is an optional future idea, not an additional committed phase.
+User-supplied visual reference from the prior design conversation, added October 14, 2026. It is kept private at `local-reference/f150-camper-concept.png` (gitignored) because it contains third-party logos; copy it there manually on each machine. It shows a color-matched shell, overland canopy, pop-top, slide-in camper, and a small truck-based Class C camper with interior/rear views (the Class C is now in [ats-f150-class-c](https://github.com/xx-r0ger-xx-gaming/ats-f150-class-c)). The project targets a compact F-150-based camper. This is visual inspiration, not measured geometry, proof of game support, or a distributable game asset; it must never be included in a mod package. The overland canopy is an optional future idea, not an additional committed phase.
 
 ## Status and source
 
@@ -74,6 +74,6 @@ Unofficial fan-made mod. Not affiliated with, sponsored by, or endorsed by Ford 
 
 ## Credits
 
-Preview renders of all variants (pickups, and a cab-chassis cut from it for the Class C) use a third-party truck model as a stand-in base vehicle. It is used only for those preview renders: it is downloaded by hand into `tools/reference-truck/` (gitignored), never committed, never exported, and not included in the mod or any release package.
+Preview renders of all variants use a third-party truck model as a stand-in base vehicle. It is used only for those preview renders: it is downloaded by hand into `tools/reference-truck/` (gitignored), never committed, never exported, and not included in the mod or any release package.
 
 "2023 Ford F150 Lihtning Platinum" (https://skfb.ly/pFtDT) by tonielpro520 is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/). Modified: badges removed, repainted, camper added.

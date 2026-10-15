@@ -12,7 +12,7 @@ Poses: a variant config may list "renders": [{"suffix": "", "set": {}}, {"suffix
 --suffix replace that list with a single pose built from the command line.
 
 Per variant (config/variants/<name>.json):
-  1. builds the proxy truck (lib/proxy_truck.py, pickup or cab_chassis per cfg["truck"]),
+  1. builds the proxy truck (lib/proxy_truck.py, pickup per cfg["truck"]),
   2. calls variants.<camper.module>.build(cfg, collection, mats) with the colour-matched library,
   3. stages HDRI world + sun, road and ground (config/render.json),
   4. renders each view to renders/variants/<name>_<view>.png (auto-framed cameras),

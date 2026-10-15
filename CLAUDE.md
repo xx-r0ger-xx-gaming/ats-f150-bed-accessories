@@ -6,9 +6,9 @@
 local-reference/f150-camper-concept.png
 ```
 
-The visual reference for the V1 color-matched camper shell (top-left panel: cab-high, factory-style, large side windows, rear glass hatch) and the later compact truck-based Class C camper. It is inspiration, not measured geometry, and is never packaged into the mod.
+The visual reference for the V1 color-matched camper shell (top-left panel: cab-high, factory-style, large side windows, rear glass hatch) and the compact truck-based Class C camper (now its own repo, ats-f150-class-c). It is inspiration, not measured geometry, and is never packaged into the mod.
 
-Read README.md and docs/roadmap.md before implementation. The task is an ATS Road Trip Ford F-150 camper mod: V1 color-matched bed shell, followed by a pop-top/slide-in camper and then an F-150-cab-based Class C RV.
+Read README.md and docs/roadmap.md before implementation. The task is an ATS Road Trip Ford F-150 camper mod: V1 color-matched bed shell, followed by a pop-top/slide-in camper and other bed accessories (overland canopy, bed rack). The F-150-cab-based Class C RV moved to the sibling repo `ats-f150-class-c` (it needs its own chassis); do not add cab-chassis code here.
 
 ## First actions
 
@@ -29,7 +29,7 @@ On the Surface Pro use simple geometry and Eevee 1280×720, 32 render samples. C
 ## Scope and evidence
 
 - V1 is a bed camper shell accessory with body-color paint matching; determine how the base vehicle exposes paint rather than hardcoding an unverified shader.
-- Preserve installed drivetrain/interior/physics references when supported. Do not claim every later RV change is cosmetic.
+- Preserve installed drivetrain/interior/physics references when supported. Do not claim every later camper change is cosmetic.
 - Use original geometry and permitted textures. Never include proprietary SCS or third-party dependency assets in Git or release packages.
 - Do not modify installed game archives. Use a separate test profile and reversible mod deployment.
 - Keep implementation, conversion, rendering and actual in-game validation statuses separate. A render is not proof of a working mod.

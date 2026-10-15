@@ -78,15 +78,12 @@ Defaults in `scripts/lib/proxy_truck.py` `DEFAULTS`. Most useful keys:
 
 | key | default | notes |
 | --- | --- | --- |
-| `type` | `pickup` | `pickup` (5.5 ft bed, tailgate) or `cab_chassis` (no bed, exposed frame). |
+| `type` | `pickup` | `pickup` only (5.5 ft bed, tailgate). The `cab_chassis` type moved to ats-f150-class-c. |
 | `tailgate` | `closed` | pickup only: `closed` (default, geometry unchanged), `down` (open, level with the bed floor, support cables), `removed` (opening down to the bed floor, as when a slide-in is loaded; `slide_in` uses it). Reported as `truck_info["tailgate"]`. |
 | `cab` | `crew` | `crew` (4 doors) or `regular` (2 doors; the front clip moves 0.72 m back, the cab back stays at the origin). |
 | `wheelbase` | 3.68 | pickup wheelbase. |
-| `wheelbase_cc` | 4.30 | cab_chassis wheelbase (front axle to rear axle). |
-| `frame_length_behind_cab` | 3.30 | cab_chassis: rails run from y = 0 to y = -this. |
-| `frame_top_z` | 0.62 / 0.80 | rail top above ground (pickup / cab_chassis). |
+| `frame_top_z` | 0.62 | frame rail top above ground. |
 | `frame_hw` | 0.56 | outer face of the rails (half width). |
-| `dual_rear_wheels` | false | cab_chassis only: dual rear wheels, wider rear track. |
 | `tire_diameter`, `tire_width`, `rim_diameter`, `track`, `spokes`, `wheel_finish` | 0.82, 0.275, 0.508, 1.70, 6, `alloy_dark` | 20 in split-spoke alloys on all-terrain tyres. |
 
 The procedural truck is original, generic and debadged (no logos, ovals or lettering) and is never
@@ -97,8 +94,7 @@ exported.
 `{"type": "pickup", "source": "reference"}` swaps the procedural pickup for a downloaded model
 (default `tools/reference-truck/2023_ford_f150_lihtning_platinum.glb`, CC BY 4.0, credited in the
 README; override with `truck.model`). It is used only for preview renders: gitignored, never
-exported or packaged. Every variant uses it: the pickups with `type: pickup`, `class_c` with
-`type: cab_chassis` (below).
+exported or packaged. Every variant uses it (`type: pickup`).
 
 `build_reference_truck()` (in `proxy_truck.py`) imports the .glb with Blender's glTF importer, bakes
 the transforms, scales it to `overall_length` (5.89 m), turns it to face +Y, then:
@@ -118,22 +114,12 @@ the transforms, scales it to `overall_length` (5.89 m), turns it to face +Y, the
   3.70 m.
 - `tailgate`: `closed` or `removed` (deletes the gate faces between the bed sides); `down` is
   procedural-only.
-- `type: cab_chassis`: after measuring, every mesh is bisected 12 mm behind the cab back (the most
-  rearward cab point over a ray grid above the rails) and everything behind is deleted (bed,
-  tailgate, rear bumper, rear wheels); cut openings are capped. The model's own rear wheel (tyre,
-  rim, brake, centre cap) is copied to the new rear axle at `wheelbase_cc` (two per side with
-  `dual_rear_wheels`), and procedural C-channel frame rails, crossmembers, axle housing, diff,
-  springs, shocks and an under-floor pack are added (frame top `frame_top_z`, default 0.80 m). The
-  frame is the procedural cab_chassis one: origin = frame top, 7 cm behind the cab back. `cab` is
-  ignored (the model is a crew cab); `class_c` uses `wheelbase_cc` 5.3 so its rear overhang matches
-  the regular-cab procedural layout.
 
 Missing file: rendering stops with the download instructions (see `docs/gaming-pc-setup.md`). Drop
 `source` (or use `--set truck.source=procedural`) to render on the procedural pickup.
 
 Reference renders of the bare bases: `--variant _ref_pickup` (reference model),
-`--variant _ref_pickup_procedural`, `--variant _ref_cab_chassis` (procedural; add
-`--set truck.source=reference` for the reference cab-chassis).
+`--variant _ref_pickup_procedural`.
 
 ### Module (`scripts/variants/<module>.py`)
 
@@ -154,7 +140,6 @@ def build(cfg, collection, mats):
     pickup adds `rail_z` (0), `bed_length`, `bed_inner_hw`, `rail_outer_hw`, `tailgate_y` (bed end), `tailgate`
     (the reference truck also gives `source`, `bed_floor_z`, `bed_inner_rear_y`, `axle_z`; use
     `ti.get("bed_floor_z", -0.52)`);
-    cab_chassis adds `frame_top_z` (0), `frame_hw`, `frame_end_y`, `rear_track` (outer tyre half width).
 - `collection`: link every object you create here (`collection.objects.link(ob)`); the runner
   rejects objects outside it.
 - `mats`: `lib.materials.MaterialLibrary` (below).
@@ -169,10 +154,6 @@ def build(cfg, collection, mats):
   as the V1 shell and config/v1.json). The bed runs to y = -`bed_length`; the cab roof is at
   `roof_z` (~0.50 above the rails, 0.568 on the reference truck); the road is at `ground_z`
   (~-1.44, -1.337 on the reference truck). Never hardcode these: read them from `truck_info`.
-- **cab_chassis**: origin = top of the frame rails, centred, 7 cm behind the cab back
-  (`cab_back_y` = 0.07). The frame runs to `frame_end_y`; the road is at `ground_z` (~-0.80).
-  A Class C body sits on the rails (z >= 0) from y = 0 rearward and may extend forward over the cab
-  (the cab roof is at `roof_z` ~1.14 above the frame).
 
 ## Shared helpers (reuse, do not copy)
 
@@ -233,8 +214,6 @@ auto-framed cameras (`place_camera`), render profiles (`configure_render`, compo
   (auto-fit to the truck + camper bounding box), `fstop`, `sun_azimuth_deg`. The side camera sits
   9 deg forward of square (279) with the sun low behind-left (205) so the flank is raking-lit; a sun
   behind the camera made paint, dark glass and graphics read washed-out mid-grey.
-- `class_c` puts the entry door + awning on the passenger/curb side (`camper.door_side: 1`) and
-  mirrors its `front34` camera to the right-front so the hero view shows the door side.
 
 ## Variant notes
 
@@ -250,14 +229,9 @@ auto-framed cameras (`place_camera`), render profiles (`configure_render`, compo
   nose at y = 1.30, wing walls 4.5 cm above the rails on rubber pads, basement floor 5 mm above the
   measured bed floor; frame tie-down receivers + spring turnbuckles just ahead of and behind the
   rear wheel opening.
-- `class_c`: windows are cut into both body halves (pocket + pane + frame + seal), decals are
-  trimmed by the same cutter, entry door has a paddle handle, hinges and a two-tread folding step;
-  the wraparound cabover glass has an eyebrow and a sill for depth. On the reference cab-chassis the
-  cabover underside is 0.115 m above the cab roof and the coach front wall 2 cm behind the cab back;
-  `--set truck.source=procedural` renders it on the procedural regular-cab chassis.
 
 Measured on the Surface Pro 8 (i7-1185G7, 2026-10-14, `--all`, 6 poses x 3 views, one Blender):
 `surface-photo` 116 to 156 s per 1280x720 view, 2394 s (~40 min) for all 18; `surface` (Eevee)
 10 to 13 s per view, ~3.7 min for all 18. Per-view seconds are in the `render_variants` log records.
 After the reference-truck switch (2026-10-15): `surface-photo` 68 to 103 s per view on the
-reference truck (490k faces; import + measure adds ~15 s per pose), 150 to 161 s for `class_c`.
+reference truck (490k faces; import + measure adds ~15 s per pose).

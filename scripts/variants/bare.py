@@ -1,4 +1,4 @@
-"""No camper: renders the proxy truck alone (reference renders of pickup / cab_chassis bases)."""
+"""No camper: renders the proxy truck alone (reference renders of the pickup bases)."""
 
 DESCRIPTION = "Bare truck (no camper) - reference only"
 

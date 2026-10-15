@@ -47,14 +47,9 @@ Goal: park, set the parking brake, and the pop-top lid rises over a few seconds;
 
 Deliverables: trigger evidence from the extracted defs, animation source, in-game test notes or the documented static fallback.
 
-## Phase 3 — F-150-cab-based Class C RV
+## Phase 3 — Class C RV (moved)
 
-- [ ] Design an original habitation body and over-cab berth while reusing supported cab/interior/drivetrain references.
-- [ ] Verify whether chassis/body replacement is possible without protected-asset redistribution.
-- [ ] Evaluate wheelbase, rear overhang, frame, cameras, collision, suspension and physics. Approve any required departures from the stock architecture explicitly in the design notes.
-- [ ] Validate visuals and driving on a separate test profile before release.
-
-Deliverables: feasibility/design report, original RV source, build scripts, release candidate and full game test evidence. Treat this as a separate major scope from V1.
+The F-150-cab-based Class C motorhome moved to [ats-f150-class-c](https://github.com/xx-r0ger-xx-gaming/ats-f150-class-c) on October 15, 2026: it needs its own chassis (wheelbase, frame, dual rear wheels, possibly an original 2-door cab), not a bed accessory slot. Its preview code, cab-chassis builder, config and roadmap live there. This repo stays bed accessories only.
 
 ## Pipeline contract
 
