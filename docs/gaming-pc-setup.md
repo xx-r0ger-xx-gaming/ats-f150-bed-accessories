@@ -5,8 +5,8 @@ Nothing here has run against the real game yet. Items marked UNVERIFIED are assu
 ## 1. Clone and configure
 
 ```powershell
-git clone https://github.com/xx-r0ger-xx-gaming/ats-f150-camper.git   # adjust to the real remote
-cd ats-f150-camper
+git clone https://github.com/xx-r0ger-xx-gaming/ats-f150-bed-accessories.git
+cd ats-f150-bed-accessories
 copy config\tools.example.json config\tools.local.json
 ```
 

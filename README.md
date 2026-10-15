@@ -1,10 +1,10 @@
-# ATS Road Trip — F-150 Camper Project
+# ATS Road Trip — F-150 Bed Accessories
 
 Project brief recorded October 14, 2026. Start with [CLAUDE.md](CLAUDE.md), then follow [the roadmap](docs/roadmap.md).
 
 ## Design intent
 
-Build an original camper mod for the Ford F-150 available in the intended ATS Road Trip setup. V1 is a removable, color-matched bed camper shell accessory. Later versions explore a pop-top/slide-in camper and other bed accessories.
+Build original bed accessories for the Ford F-150 available in the intended ATS Road Trip setup: shells, a pop-top, a slide-in camper and a bed rack. V1 is a removable, color-matched bed camper shell accessory. Later versions explore a pop-top/slide-in camper and other bed accessories.
 
 Reuse the installed vehicle's drivetrain, interior, controls, and physics through supported references where possible. This is a design goal, not a verified capability.
 
@@ -32,7 +32,7 @@ Preview-rendered designs (render-only, on the reference truck; framework and per
 | `slide_in` | Hard-sided slide-in camper with cabover (tailgate removed) |
 | `bed_rack` | Generic overland bed rack on the bed rails with rooftop tent, recovery boards, jerry cans, shovel, awning, light bar and a cargo case; `camper.loadout=bare` for the rack alone |
 
-The Class C motorhome is in [ats-superduty-class-c](https://github.com/xx-r0ger-xx-gaming/ats-superduty-class-c).
+The Class C motorhome is in [ats-hd-class-c-rv](https://github.com/xx-r0ger-xx-gaming/ats-hd-class-c-rv).
 
 ## Workstations
 

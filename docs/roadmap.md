@@ -57,7 +57,7 @@ Preview exists (`bed_rack`, render-only): generic, unbranded bed rack fitted to 
 
 ## Class C motorhome (moved)
 
-Class C motorhome lives in [ats-superduty-class-c](https://github.com/xx-r0ger-xx-gaming/ats-superduty-class-c).
+Class C motorhome lives in [ats-hd-class-c-rv](https://github.com/xx-r0ger-xx-gaming/ats-hd-class-c-rv).
 
 ## Pipeline contract
 
