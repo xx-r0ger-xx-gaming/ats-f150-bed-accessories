@@ -222,6 +222,16 @@ auto-framed cameras (`place_camera`), render profiles (`configure_render`, compo
   `truck_info`; `config/v1.json` is untouched). Render-only extras: seals, hatch hinge strip + lock
   cylinders, base trim line above the rail seal, interior. The overland rack carries two rounded
   cases, stacked recovery boards and a shovel.
+- `bed_rack`: generic overland bed rack (original profile, no maker names or logos). Tube frame on clamp
+  feet over the middle of each rail cap (x = mean of `bed_inner_hw` and `rail_outer_hw`), corner uprights
+  plus a mid post, MOLLE-style side panels with real through slots, top side rails and three crossbars
+  `top_below_roof` (0.02 m) under `roof_z`, so nothing reaches the cab (front uprights 3 cm behind the bed
+  front wall, 13 cm clear of the cab back on the reference truck). `loadout: full` adds a closed hard-shell
+  rooftop tent on brackets over the crossbars (overhangs the tailgate by ~0.12 m), a light bar above the
+  front crossbar, two recovery boards + a jerry can on the driver-side panel (the side the standard views
+  show), a packed awning above the driver-side rail, a jerry can + shovel on the passenger side and the
+  overland canopy's rotomoulded case on the bed floor (3 cm up, the floor is ribbed). `loadout: bare` is the
+  rack alone. Clearance against the truck mesh was checked with BVH overlap tests: no contacts.
 - `pop_top`: olive canvas, mesh zip windows, 0.13 m lid with a drip lip; the travel pose
   (`camper.state: closed`) leaves `closed_gap` (3 cm) under the lid filled by the folded canvas,
   with over-centre latches hooked to the lip.

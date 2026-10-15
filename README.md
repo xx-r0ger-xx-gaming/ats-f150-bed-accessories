@@ -20,6 +20,20 @@ Source: user brief and readable messages from “F150 Mod Design Thoughts” (co
 
 Exact ATS build, Road Trip product/mod identity and version, F-150 asset owner, vehicle definition names, bed dimensions, and permitted attachment mechanisms may still be unresolved; check docs/compatibility.md before relying on any of them.
 
+## Variants
+
+Preview-rendered designs (render-only, on the reference truck; framework and per-variant notes in [docs/variants.md](docs/variants.md)):
+
+| Variant | What it is |
+| --- | --- |
+| `v1_shell` | V1 colour-matched cab-high camper shell (the one with an export pipeline) |
+| `overland_canopy` | Black cab-high canopy with a low roof platform, cases and recovery boards |
+| `pop_top` / `pop_top_closed` | Pop-top camper, deployed and travel poses |
+| `slide_in` | Hard-sided slide-in camper with cabover (tailgate removed) |
+| `bed_rack` | Generic overland bed rack on the bed rails with rooftop tent, recovery boards, jerry cans, shovel, awning, light bar and a cargo case; `camper.loadout=bare` for the rack alone |
+
+The Class C motorhome is in [ats-f150-class-c](https://github.com/xx-r0ger-xx-gaming/ats-f150-class-c).
+
 ## Workstations
 
 | Machine | Intended work | Acceptance check |

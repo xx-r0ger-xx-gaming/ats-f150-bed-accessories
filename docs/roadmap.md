@@ -47,6 +47,14 @@ Goal: park, set the parking brake, and the pop-top lid rises over a few seconds;
 
 Deliverables: trigger evidence from the extracted defs, animation source, in-game test notes or the documented static fallback.
 
+## Phase 2c — Overland bed rack (optional accessory)
+
+Preview exists (`bed_rack`, render-only): generic, unbranded bed rack fitted to the measured reference bed (rail 1.337 m, bed 1.650 x 1.632 m inside, crossbars 0.02 m below the cab roof at 0.568 m above the rails), with a rooftop tent and overlanding gear.
+
+- [ ] Multi-accessory stacking on one slot (rack + tent + boards + cans as separately selectable items) is UNVERIFIED for Road Trip cars. Plan: ship **fixed combinations** as separate accessories in the same slot, e.g. bare rack, and rack + tent + gear (`camper.loadout`: `bare` / `full`), swapped in the garage.
+- [ ] If the gaming-PC check shows cars support several addon slots or `require`/`conflict_with` chains, revisit separate gear items; until then do not promise mix-and-match.
+- [ ] Same gates as V1: bed slot, paint (rack is fixed black, no body-colour match needed), export/convert/load, no cab or tailgate clipping in game.
+
 ## Phase 3 — Class C RV (moved)
 
 The F-150-cab-based Class C motorhome moved to [ats-f150-class-c](https://github.com/xx-r0ger-xx-gaming/ats-f150-class-c) on October 15, 2026: it needs its own chassis (wheelbase, frame, dual rear wheels, possibly an original 2-door cab), not a bed accessory slot. Its preview code, cab-chassis builder, config and roadmap live there. This repo stays bed accessories only.
