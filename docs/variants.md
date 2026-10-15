@@ -78,7 +78,7 @@ Defaults in `scripts/lib/proxy_truck.py` `DEFAULTS`. Most useful keys:
 
 | key | default | notes |
 | --- | --- | --- |
-| `type` | `pickup` | `pickup` only (5.5 ft bed, tailgate). The `cab_chassis` type moved to ats-f150-class-c. |
+| `type` | `pickup` | `pickup` only (5.5 ft bed, tailgate). |
 | `tailgate` | `closed` | pickup only: `closed` (default, geometry unchanged), `down` (open, level with the bed floor, support cables), `removed` (opening down to the bed floor, as when a slide-in is loaded; `slide_in` uses it). Reported as `truck_info["tailgate"]`. |
 | `cab` | `crew` | `crew` (4 doors) or `regular` (2 doors; the front clip moves 0.72 m back, the cab back stays at the origin). |
 | `wheelbase` | 3.68 | pickup wheelbase. |

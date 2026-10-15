@@ -47,5 +47,4 @@ One block per test run. Keep personal paths and any proprietary asset content ou
 ## Unresolved limitations
 
 - Preview renders only (not in-game evidence): the pickup variants now render on a downloaded CC BY reference truck (render-only, gitignored, not packaged; README "Credits"). Its scale comes from an assumed 5.89 m overall length, so the measured bed/rail/roof figures (rail 1.337 m, bed 1.650 x 1.632 m inside, roof 0.568 m above the rails) are model measurements, not Road Trip F-150 measurements; the V1 shell is refitted to them for renders only and `config/v1.json` stays UNVERIFIED.
-- The Class C preview (reference cab-chassis) moved to the ats-f150-class-c repo on 2026-10-15; its limitations are recorded there.
 - Reference truck `tailgate: down` is not supported (closed / removed only).

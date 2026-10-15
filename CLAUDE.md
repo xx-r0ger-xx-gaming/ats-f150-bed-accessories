@@ -6,9 +6,9 @@
 local-reference/f150-camper-concept.png
 ```
 
-The visual reference for the V1 color-matched camper shell (top-left panel: cab-high, factory-style, large side windows, rear glass hatch) and the compact truck-based Class C camper (now its own repo, ats-f150-class-c). It is inspiration, not measured geometry, and is never packaged into the mod.
+The visual reference for the V1 color-matched camper shell (top-left panel: cab-high, factory-style, large side windows, rear glass hatch). It is inspiration, not measured geometry, and is never packaged into the mod.
 
-Read README.md and docs/roadmap.md before implementation. The task is an ATS Road Trip Ford F-150 camper mod: V1 color-matched bed shell, followed by a pop-top/slide-in camper and other bed accessories (overland canopy, bed rack). The F-150-cab-based Class C RV moved to the sibling repo `ats-f150-class-c` (it needs its own chassis); do not add cab-chassis code here.
+Read README.md and docs/roadmap.md before implementation. The task is an ATS Road Trip Ford F-150 camper mod: V1 color-matched bed shell, followed by a pop-top/slide-in camper and other bed accessories (overland canopy, bed rack). Do not add cab-chassis code here.
 
 ## First actions
 

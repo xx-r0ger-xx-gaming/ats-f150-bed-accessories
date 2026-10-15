@@ -42,7 +42,7 @@ Status: OBSERVED-IN-MODS. Read from the text definitions of two community mods f
 
 - **Vehicle type is a car, not a truck:** def root `def/vehicle/car/ford.f150_23/` with subfolders `chassis`, `engine`, `transmission`, `cabin`, `interior`, `paint_job`, `head_light`, `accessory/<slot>`, plus `data.sii` and `lamp_setup.sii`.
 - **Unit naming:** `<id>.ford.f150_23.<type>`.
-- **Chassis:** only 4-door, 5.5 ft bed, AWD is present: unit `4d55_awd.ford.f150_23.chassis` (chassis file `4doors_55_awd.sii`). No regular cab or chassis cab, which is why the Class C (separate repo, ats-f150-class-c) needs its own chassis.
+- **Chassis:** only 4-door, 5.5 ft bed, AWD is present: unit `4d55_awd.ford.f150_23.chassis` (chassis file `4doors_55_awd.sii`). No regular cab or chassis cab.
 - **Cabin:** unit `pckup4d_55.ford.f150_23.cabin` (cabin file `pickup_4doors_55.sii`).
 - **Interior:** Lariat.
 - **Dealer def:** `def/vehicle/car_dealer/ford/ford_f150_23.sii`. Lists `vehicle : .car` with `vehicle_accessory`, `vehicle_addon_accessory` and `vehicle_wheel_accessory` units, each with `data_path`, `slot_name`, `slot_hookup`.
@@ -100,4 +100,3 @@ Dealer data for the 2023 F-150 (https://www.greghublerford.com/2023-ford-f-150-b
 | 6 | Blender Tools 2.4.1 and Conversion Tools 2.21 handle Road Trip assets | Import the vehicle model, export a tiny original mesh, convert, load in game |
 | 7 | manifest.sii fields, icon and preview sizes, ATS build | Check a working Workshop mod's manifest, the Uploader validator output, and the in-game version string |
 | 8 | Animated accessories on cars (Phase 2b pop-top): supported at all, and which triggers (parking brake, beacon, speed) | Search the extracted F-150 and other car defs for animated addons and their controller/trigger fields; compare with an animated truck-accessory mod |
-| 9 | Class C (ats-f150-class-c): can a mod add a new Road Trip *car* (`def/vehicle/car/`, car dealer entry), or must a regular-cab chassis cab be a mod *truck* def (losing Road Trip car features)? | In the extracted Road Trip defs, check how the car dealer and vehicle lists reference car units and whether a third-party car unit loads; try a tiny original test car on a test profile |

@@ -5,8 +5,7 @@ manufacturer model: only approximate published overall proportions of a full-siz
 pickup. No logos, ovals, lettering or badges anywhere.
 
 Body type (spec["type"]): pickup only - crew (4-door) or regular (2-door) cab, 5.5 ft bed with
-tailgate (spec["tailgate"]: closed | down | removed), wheelbase ~3.68 m. (The cab_chassis base for
-the Class C motorhome moved to the ats-f150-class-c repo.)
+tailgate (spec["tailgate"]: closed | down | removed), wheelbase ~3.68 m.
 
 Construction: body panels are lofted cross-sections (tumblehome, shoulder crease, tuck-under),
 bevelled caps, EXACT-boolean wheel arches and panel gaps, weighted normals for clean shading.
@@ -31,7 +30,7 @@ from lib.meshkit import (
 COLLECTION = "preview_context"
 
 DEFAULTS = {
-    "type": "pickup",                 # pickup only (cab_chassis lives in ats-f150-class-c)
+    "type": "pickup",                 # pickup only
     "cab": "crew",                    # crew (4 doors) | regular (2 doors, cab 0.72 m shorter)
     "windshield_rake": None,          # horizontal run of the windshield; None -> 0.80 crew / 0.70 regular
     "body_hw": 0.99,                  # half body width at the shoulder (flares reach ~1.015)
@@ -75,7 +74,7 @@ def make_spec(overrides=None):
     s = dict(DEFAULTS)
     s.update({k: v for k, v in (overrides or {}).items() if not k.startswith("_") and k not in ("source", "model")})
     if s["type"] != "pickup":
-        raise ValueError(f"truck type must be pickup (cab_chassis moved to ats-f150-class-c), got {s['type']}")
+        raise ValueError(f"truck type must be pickup, got {s['type']}")
     if s["tailgate"] not in ("closed", "down", "removed"):
         raise ValueError(f"truck tailgate must be closed|down|removed, got {s['tailgate']}")
     if s["cab"] not in ("crew", "regular"):
@@ -1077,7 +1076,7 @@ def build_reference_truck(spec, mats, collection):
     s.update({k: v for k, v in spec.items() if not k.startswith("_")})
     s.setdefault("type", "pickup")
     if s["type"] != "pickup":
-        raise PipelineError(f"reference truck: type must be pickup (cab_chassis moved to ats-f150-class-c), "
+        raise PipelineError(f"reference truck: type must be pickup, "
                             f"got {s['type']}")
     if s.get("tailgate", "closed") not in ("closed", "removed"):
         raise PipelineError("reference truck: tailgate must be closed|removed")

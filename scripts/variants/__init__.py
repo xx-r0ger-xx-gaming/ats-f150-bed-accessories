@@ -10,7 +10,7 @@ A variant module is scripts/variants/<module>.py exposing
     collection - bpy collection to link every created object into.
     mats       - lib.materials.MaterialLibrary; mats["paint"] is the colour-matched body paint.
 
-Optional module attributes: TRUCK_TYPES = ("pickup",) (validated; cab_chassis lives in ats-f150-class-c),
+Optional module attributes: TRUCK_TYPES = ("pickup",) (validated),
 DESCRIPTION = "one line".
 
 Modules are found by file name (variants.<module>), or registered explicitly with

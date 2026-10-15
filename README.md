@@ -4,13 +4,13 @@ Project brief recorded October 14, 2026. Start with [CLAUDE.md](CLAUDE.md), then
 
 ## Design intent
 
-Build an original camper mod for the Ford F-150 available in the intended ATS Road Trip setup. V1 is a removable, color-matched bed camper shell accessory. Later versions explore a pop-top/slide-in camper and other bed accessories. The F-150-cab-based Class C motorhome needs its own chassis, so it moved to its own repo, [ats-f150-class-c](https://github.com/xx-r0ger-xx-gaming/ats-f150-class-c), on October 15, 2026.
+Build an original camper mod for the Ford F-150 available in the intended ATS Road Trip setup. V1 is a removable, color-matched bed camper shell accessory. Later versions explore a pop-top/slide-in camper and other bed accessories.
 
 Reuse the installed vehicle's drivetrain, interior, controls, and physics through supported references where possible. This is a design goal, not a verified capability.
 
 ## Concept reference
 
-User-supplied visual reference from the prior design conversation, added October 14, 2026. It is kept private at `local-reference/f150-camper-concept.png` (gitignored) because it contains third-party logos; copy it there manually on each machine. It shows a color-matched shell, overland canopy, pop-top, slide-in camper, and a small truck-based Class C camper with interior/rear views (the Class C is now in [ats-f150-class-c](https://github.com/xx-r0ger-xx-gaming/ats-f150-class-c)). The project targets a compact F-150-based camper. This is visual inspiration, not measured geometry, proof of game support, or a distributable game asset; it must never be included in a mod package. The overland canopy is an optional future idea, not an additional committed phase.
+User-supplied visual reference from the prior design conversation, added October 14, 2026. It is kept private at `local-reference/f150-camper-concept.png` (gitignored) because it contains third-party logos; copy it there manually on each machine. It shows a color-matched shell, overland canopy, pop-top, slide-in camper. The project targets a compact F-150-based camper. This is visual inspiration, not measured geometry, proof of game support, or a distributable game asset; it must never be included in a mod package. The overland canopy is an optional future idea, not an additional committed phase.
 
 ## Status and source
 
@@ -32,7 +32,7 @@ Preview-rendered designs (render-only, on the reference truck; framework and per
 | `slide_in` | Hard-sided slide-in camper with cabover (tailgate removed) |
 | `bed_rack` | Generic overland bed rack on the bed rails with rooftop tent, recovery boards, jerry cans, shovel, awning, light bar and a cargo case; `camper.loadout=bare` for the rack alone |
 
-The Class C motorhome is in [ats-f150-class-c](https://github.com/xx-r0ger-xx-gaming/ats-f150-class-c).
+The Class C motorhome is in [ats-superduty-class-c](https://github.com/xx-r0ger-xx-gaming/ats-superduty-class-c).
 
 ## Workstations
 

@@ -55,9 +55,9 @@ Preview exists (`bed_rack`, render-only): generic, unbranded bed rack fitted to 
 - [ ] If the gaming-PC check shows cars support several addon slots or `require`/`conflict_with` chains, revisit separate gear items; until then do not promise mix-and-match.
 - [ ] Same gates as V1: bed slot, paint (rack is fixed black, no body-colour match needed), export/convert/load, no cab or tailgate clipping in game.
 
-## Phase 3 — Class C RV (moved)
+## Class C motorhome (moved)
 
-The F-150-cab-based Class C motorhome moved to [ats-f150-class-c](https://github.com/xx-r0ger-xx-gaming/ats-f150-class-c) on October 15, 2026: it needs its own chassis (wheelbase, frame, dual rear wheels, possibly an original 2-door cab), not a bed accessory slot. Its preview code, cab-chassis builder, config and roadmap live there. This repo stays bed accessories only.
+Class C motorhome lives in [ats-superduty-class-c](https://github.com/xx-r0ger-xx-gaming/ats-superduty-class-c).
 
 ## Pipeline contract
 
