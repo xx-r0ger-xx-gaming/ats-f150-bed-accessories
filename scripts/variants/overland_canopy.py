@@ -5,7 +5,7 @@ from mathutils import Vector
 from lib.common import load_json
 from lib.meshkit import Part, add_weighted_normals
 from lib.meshkit import box as _box
-from lib.shell_v1 import ShellFrame, build_shell
+from lib.shell_v1 import build_shell, make_frame
 from variants.v1_shell import fit_shell_cfg, shell_details, shell_interior, shell_materials
 
 def box(p, lo, hi, key, bev=0.0, seg=1):
@@ -134,13 +134,13 @@ def build(cfg, collection, mats):
     mats.add("case", mats.principled("oc_case", base_color=(0.018, 0.019, 0.02, 1.0), roughness=0.42))
     mats.add("case_dark", mats.principled("oc_case_dark", base_color=(0.006, 0.006, 0.007, 1.0), roughness=0.6))
     mats.add("oc_board", mats.principled("oc_board", base_color=(0.30, 0.22, 0.12, 1.0), roughness=0.6))
-    role = {"shell_paint": black, "glass": mats["glass_tint"], "trim": mats["seal"], "lamp": mats["lamp_red_lens"]}
+    role = {"shell_paint": black, "glass": mats["glass"], "trim": mats["seal"], "lamp": mats["lamp_red_lens"]}
     objs = build_shell(shell_cfg, role, collection)
     for ob in objs:
         ob.name = "overland_canopy_" + ob.name
         if "shell_body" in ob.name:
             add_weighted_normals(ob)
-    fr = ShellFrame(shell_cfg)
+    fr = make_frame(shell_cfg)
     offset = Vector(shell_cfg["origin"]["offset"])
     shell_materials(mats)
     extra = [shell_details(shell_cfg, fr, mats, collection, prefix="overland_canopy_"),

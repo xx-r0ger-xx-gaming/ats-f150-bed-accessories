@@ -8,11 +8,13 @@ sleeping platform with mattress, a duffel and a cooler) so the glass has somethi
 """
 import copy
 
+import bmesh
+
 from mathutils import Vector
 
 from lib.common import load_json
-from lib.meshkit import Part, add_weighted_normals, annulus_prism, box, cylinder_x, loft, oriented_box
-from lib.shell_v1 import ShellFrame, build_shell, map_outline, window_outlines
+from lib.meshkit import Part, add_weighted_normals, annulus_prism, box, build_prism, cylinder_x, loft, oriented_box
+from lib.shell_v1 import build_shell, make_frame, map_outline, window_outlines
 
 TRUCK_TYPES = ("pickup",)
 DESCRIPTION = "Colour-matched cab-high camper shell (V1 mod geometry)"
@@ -32,48 +34,123 @@ def offset2d(pts, d):
     return out
 
 
-def fit_shell_cfg(shell_cfg, bed, camper=None):
-    """Render fit: size and place the shell from the shared bed dimensions (lib/bed.py, config/bed.json).
+# Cab-high cap styling (render fit): how the cap continues the measured cab greenhouse
+# (config/bed.json cab_* keys). Override per variant with camper.style.
+SHELL_STYLE = {
+    "roof_drop": 0.004,        # cap roof centre this much below the cab roof (same crown)
+    "skirt_gap": 0.005,        # skin bottom above the rail-cap ribs: ~1.2 cm of rail seal shows
+    "front_corner_r": 0.035,   # plan radius of the front vertical corners (tight: small cab gap look)
+    "rear_corner_r": 0.09,
+    "front_top_scale": 0.55,   # front top roll = this x the cab's roof-to-back roll (mirrors it)
+    "rear_top_ry": 0.09,       # rear top roll depth
+    "end_top_keep": 0.3,       # end faces keep this fraction of the shoulder-to-roof height
+    "glass_min_band": 0.025,   # minimum painted band between the rail top and the side glass
+    "rear_rake": 0.05,
+    "side_margin_front": 0.075,
+    "side_margin_rear": 0.12,
+    "pillar_width": 0.05,
+    "side_corner_radius": 0.045,
+    "pillar_blackout": True,   # gloss-black pillar between the side panes, like the cab's B pillar
+    "window_seal": 0.008,      # visible rubber around each pane (was 14 mm)
+    "glass_inset": 0.006,      # pane depth under the skin (was 12 mm: the lit cut wall showed)
+}
 
-    Front face cab_gap (default 4 cm) behind the cab back and leaning with it; base on the rails
-    (above the raised bed front wall, the rail seal fills the gap down to the rail cap); sides flush
-    with the outer edge of the rail caps, tapering with them; rear corners on the closed tailgate's
-    outer face and the rear face bowed like the tailgate; roof cab-high. config/v1.json (the export
-    geometry) is not changed."""
+
+def fit_shell_cfg(shell_cfg, bed, camper=None):
+    """Render fit: size, place and STYLE the shell from the shared bed dimensions (lib/bed.py,
+    config/bed.json).
+
+    Footprint (Bed.footprint): front face cab_gap (default 4 cm) behind the cab back and leaning +
+    bowing with it, sides flush with the outer edge of the rail caps and tapering with them, rear
+    corners on the closed tailgate's outer face and the rear face bowed like the tailgate. The skin
+    bottom sits skirt_gap above the rail-cap ribs (thin seal), notched over the raised bed front wall.
+    Styling (lib/shell_v1.ProfiledFrame): the cross-section continues the measured cab greenhouse
+    (tumblehome, shoulder, roof edge, crown), the roof centre roof_drop under the cab roof, the
+    front top rolled like the cab's roof-to-back edge, the side glass on the cab's window line.
+    config/v1.json (the export geometry) is not changed."""
     cp = camper or {}
+    st = dict(SHELL_STYLE)
+    st.update(cp.get("style", {}))
     cfg = copy.deepcopy(shell_cfg)
-    fp = bed.footprint(cab_gap=cp.get("cab_gap", 0.04), seal_min=cp.get("seal_min", 0.012))
-    base_z, y_front, y_rear, hw_r = fp["base_z"], fp["y_front"], fp["y_rear"], fp["hw_rear"]
-    H = bed["cab_roof_z"] - base_z + cfg["shell"]["height_offset_from_cab"]
-    b, sh, seal = cfg["bed"], cfg["shell"], cfg["rail_seal"]
+    gap = cp.get("cab_gap", 0.04)
+    fp = bed.footprint(cab_gap=gap, seal_min=cp.get("seal_min", 0.012))
+    y_front, y_rear, hw_r = fp["y_front"], fp["y_rear"], fp["hw_rear"]
+    oz = bed["rail_top_z"] + st["skirt_gap"]                 # skin bottom (shell frame z = 0)
+    top = bed["cab_roof_z"] - st["roof_drop"] - oz           # roof centre
+    crown = bed["cab_roof_crown"]
+    H = top - crown                                          # roof edge line
+    b, sh, seal, win = cfg["bed"], cfg["shell"], cfg["rail_seal"], cfg["windows"]
     b["length_at_rails"] = round(y_front - y_rear, 4)
     b["width_at_rails"] = round(2 * fp["hw_front"], 4)
     b["width_at_rails_rear"] = round(2 * hw_r, 4)
-    b["cab_height_above_rails"] = round(bed["cab_roof_z"] - base_z, 4)
+    b["cab_height_above_rails"] = round(H, 4)
+    sh["height_offset_from_cab"] = 0.0
+    sh["roof_crown"] = round(crown, 4)
     sh["rear_bow"] = round(fp["bow"], 4)
     sh["front_rake"] = round(-bed["cab_back_lean"] * H, 4)
+    sh["rear_rake"] = st["rear_rake"]
     sh["roof_divisions"] = max(sh["roof_divisions"], 12)
-    seal["drop"] = round(base_z - bed["rail_cap_z"] + 0.001, 4)
-    seal["front_drop"] = round(base_z - bed["front_wall_top_z"] + 0.001, 4)
+    sh["base_trim"] = False
+    cab_x0 = bed.cab_hw_at(oz)
+    sh["profile"] = {
+        "c1": bed["cab_tumblehome"], "c2": bed["cab_tumblehome_curve"], "zb": round(oz, 4),
+        "z_sh": round(bed["cab_shoulder_z"] - oz, 4),
+        "edge_in": round(cab_x0 - bed["cab_roof_edge_hw"], 4),
+        "rc_f": st["front_corner_r"], "rc_r": st["rear_corner_r"],
+        "ry_f": round(bed["cab_back_top_ry"] * st["front_top_scale"], 4), "ry_r": st["rear_top_ry"],
+        "q": st["end_top_keep"],
+        "kf": round(bed["cab_back_bow"] / bed["rail_inner_hw"] ** 2, 4), "kf_z": 0.25,
+        # bed front wall (raised above the rails) under the shell front wall's inner part
+        "notch": {"x": bed["rail_inner_hw"],
+                  "y": [round(bed["front_wall_inner_y"] - 0.006 - y_front, 4),
+                        round(bed["front_wall_outer_y"] + 0.003 - y_front, 4)],
+                  "z": round(fp["base_z"] - oz, 4)},
+    }
+    # windows: side glass on the cab's window line (bottom as low as the rail allows, top level
+    # with the cab glass), rear glass below the rear top roll
+    z_sh = sh["profile"]["z_sh"]
+    gb = max(bed["cab_glass_bottom_z"], bed["rail_top_z"] + st["glass_min_band"]) - oz
+    gt = min(bed["cab_glass_top_z"] - oz, z_sh - 0.02)
+    win["side_margin_bottom"] = round(gb, 4)
+    win["side_margin_top"] = round(H - gt, 4)
+    win["side_margin_front"] = st["side_margin_front"]
+    win["side_margin_rear"] = st["side_margin_rear"]
+    win["pillar_width"] = st["pillar_width"]
+    win["side_corner_radius"] = st["side_corner_radius"]
+    win["rear_margin_top"] = round(H - (z_sh - 0.07), 4)
+    win["seal_width"] = st["window_seal"]
+    win["pillar_blackout"] = st["pillar_blackout"]
+    win["seal_key"] = "v1_window_rubber"  # matte black like the cab's surrounds (gloss seal read tan)
+    win["seal_proud"] = 0.0015
+    win["glass_inset"] = st["glass_inset"]                # near-flush bonded glass, like the cab
+    win["seal_lip"], win["seal_depth"] = 0.005, st["glass_inset"] + 0.002
+    seal["drop"] = round(oz - bed["rail_cap_z"] + 0.001, 4)
+    seal["front_drop"] = round(oz - bed["front_wall_top_z"] + 0.001, 4)
+    seal["front_height"] = round(fp["base_z"] - oz + 0.003, 4)
     seal["front_zone_hw"] = bed["rail_inner_hw"]
     seal["front_zone_depth"] = 0.06
     seal["outset"] = 0.0                                # flush with the bed side
     seal["height"] = 0.004                              # tucked just into the skin's bottom edge
-    cfg["origin"]["offset"] = [0.0, round(y_front, 4), round(base_z, 4)]
-    print(f"[shell fit] {bed.name}: front y {y_front:+.3f} (cab gap {cp.get('cab_gap', 0.04):.3f}), base z "
-          f"{base_z:+.3f}, length {y_front - y_rear:.3f}, width {2 * fp['hw_front']:.3f} -> "
-          f"{2 * hw_r:.3f}, rear bow {sh['rear_bow']:.3f}, front rake {sh['front_rake']:+.3f}, H {H:.3f}")
+    cfg["origin"]["offset"] = [0.0, round(y_front, 4), round(oz, 4)]
+    print(f"[shell fit] {bed.name}: front y {y_front:+.3f} (cab gap {gap:.3f}), skin bottom z {oz:+.3f} "
+          f"(front wall notch to {fp['base_z']:+.3f}), length {y_front - y_rear:.3f}, width "
+          f"{2 * fp['hw_front']:.3f} -> {2 * hw_r:.3f}, rear bow {sh['rear_bow']:.3f}, roof {oz + top:+.3f} "
+          f"(cab {bed['cab_roof_z']:+.3f}, crown {crown:.3f}), tumblehome {bed['cab_tumblehome']:.3f}/m, "
+          f"shoulder {bed['cab_shoulder_z']:+.3f}, side glass {gb + oz:+.3f}..{gt + oz:+.3f}")
     return cfg
 
 
 def shell_materials(mats):
     if "v1_headliner" in mats:
         return
-    mats.add("v1_headliner", mats.principled("v1_headliner", base_color=(0.16, 0.16, 0.155, 1), roughness=0.95,
+    mats.add("v1_headliner", mats.principled("v1_headliner", base_color=(0.05, 0.05, 0.052, 1), roughness=0.95,
                                              sheen=0.6))
     mats.add("v1_mattress", mats.canvas_material("v1_mattress", (0.10, 0.115, 0.13), wrinkle=0.6))
     mats.add("v1_duffel", mats.canvas_material("v1_duffel", (0.20, 0.09, 0.03), wrinkle=1.2))
     mats.add("v1_drawers", mats.principled("v1_drawers", base_color=(0.03, 0.03, 0.032, 1), roughness=0.7))
+    # matte, low-specular window rubber: reads black even at grazing angles, like the cab surrounds
+    mats.add("v1_window_rubber", mats.principled("v1_window_rubber", base_color=(0.008, 0.008, 0.009, 1),
+                                                 roughness=0.85, specular=0.15))
     mats.add("v1_cooler", mats.principled("v1_cooler", base_color=(0.05, 0.11, 0.16, 1), roughness=0.4,
                                           clearcoat=0.3))
 
@@ -81,15 +158,33 @@ def shell_materials(mats):
 def shell_details(cfg, fr, mats, collection, prefix=""):
     win = cfg["windows"]
     p = Part(prefix + "shell_render_details", mats)
-    # proud rubber seal around every opening (bonded-glass look), 14 mm wide, 4 mm proud
+    # proud rubber seal around every opening (bonded-glass look), 4 mm proud
+    sw = win.get("seal_width", 0.014)
     for kind, sign, pts in window_outlines(fr, cfg):
-        outer = offset2d(pts, 0.014)
-        inner = offset2d(pts, -0.002)
+        outer = offset2d(pts, sw)
+        # lip: reaches seal_lip into the opening and down past the pane edge (hides the cut wall)
+        lip, deep = win.get("seal_lip", 0.002), win.get("seal_depth", 0.003)
+        proud = win.get("seal_proud", 0.004)
+        inner = offset2d(pts, -lip)
         faces = annulus_prism(p.bm, map_outline(fr, kind, sign, outer, -0.003),
-                              map_outline(fr, kind, sign, outer, 0.004),
-                              map_outline(fr, kind, sign, inner, -0.003),
-                              map_outline(fr, kind, sign, inner, 0.004))
-        p.set_mat(faces, "seal")
+                              map_outline(fr, kind, sign, outer, proud),
+                              map_outline(fr, kind, sign, inner, -deep),
+                              map_outline(fr, kind, sign, inner, proud))
+        p.set_mat(faces, win.get("seal_key", "seal"))
+    if win.get("pillar_blackout"):
+        # gloss-black applique over the pillar between the side panes (like the cab's B pillar),
+        # so the cap's glass reads as one dark band continuing the cab greenhouse
+        y_front, y_rear = -win["side_margin_front"], -fr.L + win["side_margin_rear"]
+        split = y_front + (y_rear - y_front) * win["side_split"]
+        half_p = win["pillar_width"] / 2 + 0.003
+        z0, z1 = win["side_margin_bottom"], fr.H - win["side_margin_top"]
+        pts = ([(split + half_p, z0 + (z1 - z0) * k / 12) for k in range(13)]
+               + [(split - half_p, z1 - (z1 - z0) * k / 12) for k in range(13)])
+        for sign in (-1, 1):
+            faces = build_prism(p.bm, map_outline(fr, "side", sign, pts, -0.002),
+                                map_outline(fr, "side", sign, pts, 0.003))
+            bmesh.ops.recalc_face_normals(p.bm, faces=faces)
+            p.set_mat(faces, "trim_gloss")
     # rear hatch: hinge strip above the glass (segments follow a bowed rear face), two lock
     # cylinders beside the handle
     gz1 = fr.H - win["rear_margin_top"]
@@ -107,6 +202,8 @@ def shell_details(cfg, fr, mats, collection, prefix=""):
         c = fr.rear_point(x, gz0 + 0.045, 0.0)
         oriented_box(p, c + ax[2] * 0.006, ax, (0.05, 0.05, 0.012), "trim_gloss", bev=0.006)
         oriented_box(p, c + ax[2] * 0.014, ax, (0.026, 0.026, 0.008), "chrome", bev=0.004)
+    if not cfg["shell"].get("base_trim", True):
+        return p.finish(collection, smooth=40)
     # base trim line just above the rail seal (sides + rear), satin black, 4 mm proud, on the panels
     z0, z1 = 0.026, 0.040
     zm = 0.5 * (z0 + z1)
@@ -166,13 +263,14 @@ def shell_interior(cfg, fr, mats, collection, bed, offset, prefix=""):
 def build(cfg, collection, mats):
     shell_materials(mats)
     shell_cfg = fit_shell_cfg(load_json(cfg["camper"].get("config", "config/v1.json")), cfg["bed"], cfg["camper"])
-    role_mats = {"shell_paint": mats["paint"], "glass": mats["glass_tint"], "trim": mats["seal"],
+    # the truck's own body paint and cab glass materials (one material each: identical look)
+    role_mats = {"shell_paint": mats["paint"], "glass": mats["glass"], "trim": mats["seal"],
                  "lamp": mats["lamp_red_lens"]}
     objs = build_shell(shell_cfg, role_mats, collection)
     for ob in objs:
         if ob.name.startswith("shell_body"):
             add_weighted_normals(ob)
-    fr = ShellFrame(shell_cfg)
+    fr = make_frame(shell_cfg)
     offset = Vector(shell_cfg["origin"]["offset"])
     extra = [shell_details(shell_cfg, fr, mats, collection),
              shell_interior(shell_cfg, fr, mats, collection, cfg["bed"], offset)]

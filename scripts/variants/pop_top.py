@@ -147,7 +147,7 @@ def _glaze(part, ol, mapper, outward, strips=False):
         pane.normal_update()
         if pane.normal.dot(Vector(outward)) < 0:
             pane.normal_flip()
-        part.set_mat([pane], "glass_tint")
+        part.set_mat([pane], "glass")              # the truck's own cab glass
     for (d_in, d_out, a, b, key) in ((-0.012, 0.0, -0.016, 0.003, "seal"), (0.0, 0.016, -0.002, 0.005, "seal")):
         o, i = _offset(ol, d_out), _offset(ol, d_in)
         faces = annulus_prism(bm, [mapper(u, v, a) for u, v in o], [mapper(u, v, b) for u, v in o],
@@ -257,8 +257,12 @@ def build(cfg, collection, mats):
     def hw(y):                                    # bottom half width: flush with the rail caps
         return bed.rail_outer_hw_at(y)
 
-    def hwt(y):                                   # top half width (slight tumblehome)
-        return hw(y) - 0.035
+    # tumblehome: the cab greenhouse's (measured, config/bed.json cab_*), scaled by
+    # tumblehome_from_cab, so the base flank continues the cab's side line
+    tumble = float(c.get("tumblehome_from_cab", 1.0)) * (bed.cab_hw_at(zb) - bed.cab_hw_at(zt - 0.04))
+
+    def hwt(y):                                   # top half width
+        return hw(y) - tumble
 
     def side_x(z, y):
         return hw(y) + (hwt(y) - hw(y)) * (z - zb) / ((zt - 0.04) - zb)
@@ -304,7 +308,9 @@ def build(cfg, collection, mats):
     # windows: side windows (both sides) + rear hatch glass, as flush pockets
     openings = []
     glaze = Part(f"{NAME}_glazing", mats)
-    wz0, wz1 = zb + 0.073, zt - 0.095
+    # side glass on the cab's window line (as low as the rail seal allows, top level with the cab glass)
+    wz0 = max(zb + 0.03, bed["cab_glass_bottom_z"], bed["rail_top_z"] + 0.045)
+    wz1 = min(zt - 0.095, bed["cab_glass_top_z"])
     win_y0, win_y1 = yr + 0.20, yf - 0.16
     for sx in (-1, 1):
         def sp(y, z, d, sx=sx):                    # point on the side skin, d > 0 = outward

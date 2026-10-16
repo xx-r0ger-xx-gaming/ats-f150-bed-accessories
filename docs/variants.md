@@ -145,7 +145,8 @@ overhangs it, max 9 mm inset mid-bed), `bed_inner_hw`, `bed_floor_z`, `bed_floor
 `_outer_y`/`_top_z` (bed front wall and its top cap), `cab_back_y` + `cab_back_lean` (centreline,
 y = cab_back_y + lean * z), `cab_roof_z`, `bed_side_rear_y`, `tailgate_top_z`, `tailgate_face_y` +
 `tailgate_face_bow` (closed-gate outer face just under its top edge: parabola, centre most rearward,
-bow = how far forward it is at x = rail_inner_hw). Helpers: `rail_outer_hw_at(y)`,
+bow = how far forward it is at x = rail_inner_hw), and the cab greenhouse section a cab-high cap
+continues (`cab_*`, below). Helpers: `rail_outer_hw_at(y)`,
 `rail_mid_hw_at(y)`, `tailgate_face_at(x)`, `cab_back_at(z)`, and `footprint(cab_gap, seal_min)` =
 where a full-bed hard camper sits (base height, front face, rear corners, half widths, rear bow),
 used by the shell, canopy and pop-top; `rear_bow_at(x, fp)`.
@@ -164,6 +165,15 @@ used by the shell, canopy and pop-top; `rear_bow_at(x, fp)`.
 | bed sides rear end | -1.756 | - |
 | cab roof | 0.568 above the rail tops | 0.568 (same) |
 | wheel housings | inner x 0.552, top -0.368, y -0.27 .. -1.00 | - |
+
+Cab greenhouse section (`measure_cab`, same profile, so the in-game truck overrides it with the same
+single `active` switch): on the C pillar (y = cab back + 0.25) the side is
+`x(z) = cab_hw_rail - cab_tumblehome z - cab_tumblehome_curve z^2` = 0.927 - 0.372 z - 0.010 z^2
+(fit above the 4 cm beltline flare, 3 mm max residual) up to `cab_shoulder_z` +0.47, roof edge at
+half width `cab_roof_edge_hw` 0.66, `cab_roof_crown` 10 mm; cab back plan bow `cab_back_bow` 13.5 mm
+at x = rail_inner_hw (measured at z 0.25, ~0 at the rails), vertical corner radius 0.084, roof-to-back
+roll `cab_back_top_ry`/`_rz` 0.26 x 0.08 m; rear-door side glass `cab_glass_bottom_z`/`_top_z`
+-0.02 / +0.445.
 
 What the earlier fit got wrong: shell full width (1.86 m) all the way back (the bed narrows to 1.75 m,
 so the rear corners hung 5-6 cm outside the bed sides), length to a flat -1.80 (past the tail-lamp
@@ -274,18 +284,30 @@ auto-framed cameras (`place_camera`), render profiles (`configure_render`, compo
 
 ## Variant notes
 
+- `v1_shell` / `overland_canopy` styling (`fit_shell_cfg` `SHELL_STYLE`, per-variant
+  `camper.style` overrides; `lib/shell_v1.ProfiledFrame`): the cap continues the cab greenhouse, not
+  a box: the cross-section is the measured cab section (tumblehome, tangent shoulder arc into the roof
+  edge, crowned roof) lofted along the bed and tapered with the rails; roof centre `roof_drop` 4 mm
+  under the cab roof; front face leaning and bowing with the cab back, front top rolled
+  (`front_top_scale` 0.55 x the cab's roof-to-back roll) so the cab and cap tops form a matching V;
+  tight front corners (r 0.035), rear corners r 0.09, rear top roll 0.09; skin bottom `skirt_gap` 5 mm
+  above the rail ribs (about 1.2 cm of black rail seal shows; the front wall is notched over the
+  raised bed front wall); side glass bottom as close to the cab glass line as the rail allows
+  (+0.025), top level with the cab glass, 8 mm seals, near-flush panes (6 mm), gloss-black pillar
+  between the panes; glass and paint are the truck's own `glass` and `paint` materials. The export
+  geometry (`config/v1.json`, no `profile`) still uses the plain `ShellFrame`.
 - `v1_shell` / `overland_canopy`: refitted for the render from the shared bed dimensions
   (`fit_shell_cfg` -> `Bed.footprint`; `config/v1.json`, the export geometry, is untouched and still
   exports byte-identical meshes): front face 4 cm behind the cab back (`camper.cab_gap`) and leaning
-  with it (negative `front_rake`), base 18 mm above the rail contact plane so the front wall clears
-  the raised bed front wall, a rail seal from the flat rail cap up into the skin (on the bed front wall
+  with it (negative `front_rake`), skin 5 mm above the rail contact plane with the front wall notched
+  to 18 mm where it crosses the raised bed front wall, a rail seal from the flat rail cap up into the skin (on the bed front wall
   inboard of the rails), sides flush with the outer rail-cap edge and tapering with it
   (`width_at_rails_rear`), rear corners on the closed tailgate face and the rear face bowed like the
   tailgate (`rear_bow`, glass built from strips), roof cab-high. Render-only extras: seals, hatch hinge
-  strip + lock cylinders, base trim line, interior (inside the bed walls, on the floor ribs). The
+  strip + lock cylinders, interior (inside the bed walls, on the floor ribs). The
   overland rack (insets from the roof edges) carries two rounded cases, stacked recovery boards and
   a shovel. Fit check: no rigid contact; seal 1 mm into the cap; sides 0 to 9 mm inside the rail edge;
-  cab gap 4.0 cm on the centreline (4-5 cm across the cab back, more at its rounded top corners);
+  cab gap 4.0 cm on the centreline (3.7-4.5 cm across the cab back as the front follows its bow, more at its rounded top corners);
   rear within 1 cm of the tailgate face.
 - `bed_rack`: generic overland bed rack (original profile, no maker names or logos). Straight tube
   side frames on clamp feet over the middle of the rail cap where it is narrowest (the rear), so the
@@ -298,7 +320,9 @@ auto-framed cameras (`place_camera`), render profiles (`configure_render`, compo
   standard views show), a packed awning above the driver-side rail, a jerry can + shovel on the
   passenger side and the overland canopy's rotomoulded case on the floor ribs. `loadout: bare` is the
   rack alone. No contact with the truck mesh (`check_fit.py`).
-- `pop_top`: footprint from `Bed.footprint` like the shell (front 4 cm behind the cab, sides flush
+- `pop_top`: base flank tumblehome = the cab's measured tumblehome over its height
+  (`camper.tumblehome_from_cab`, default 1), side glass on the cab window line (bottom +0.045, top
+  level with the cab glass), cab glass material; footprint from `Bed.footprint` like the shell (front 4 cm behind the cab, sides flush
   with the tapering rail caps, rear corners on the tailgate face, the rear end bent to the tailgate
   bow, base above the bed front wall on a rail seal); olive canvas, mesh zip windows, 0.13 m lid with a
   drip lip, 15 mm rear lid overhang; the travel pose (`camper.state: closed`) leaves `closed_gap` (3

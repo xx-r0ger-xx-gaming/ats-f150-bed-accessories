@@ -14,7 +14,12 @@
     "cab_roof_z": "cab roof top",
     "bed_side_rear_y": "rear end of the bed sides at rail height (tail-lamp tops)",
     "tailgate_top_z": "closed tailgate top",
-    "tailgate_face_y, tailgate_face_bow": "closed tailgate outer face just under its top edge: y at the centre, and how far forward it is at x = rail_inner_hw (parabola)"
+    "tailgate_face_y, tailgate_face_bow": "closed tailgate outer face just under its top edge: y at the centre, and how far forward it is at x = rail_inner_hw (parabola)",
+    "cab_section_y, cab_hw_rail, cab_tumblehome, cab_tumblehome_curve": "cab greenhouse section on the C pillar (station y): side half width x(z) = cab_hw_rail - cab_tumblehome*z - cab_tumblehome_curve*z^2 up to cab_shoulder_z; cab-high caps continue this tumblehome",
+    "cab_shoulder_z, cab_roof_edge_hw, cab_roof_crown": "where the side starts rolling into the roof, where the roof starts rolling into the side (half width), and the roof crown (centre minus roof height near that edge)",
+    "cab_back_bow, cab_back_corner_r": "cab back wall at mid height: how far forward it is at x = rail_inner_hw vs the centre (parabola), and the plan radius of its vertical corners",
+    "cab_back_top_ry, cab_back_top_rz": "roof-to-back roll on the centreline: depth along y and height of the rounded top edge",
+    "cab_glass_bottom_z, cab_glass_top_z": "rear-door side glass bottom and top: the cab window line the cap's windows line up with"
   },
   "active": "reference_glb",
   "profiles": {
@@ -45,7 +50,20 @@
       "bed_side_rear_y": -1.7563,
       "tailgate_top_z": -0.0043,
       "tailgate_face_y": -1.8438,
-      "tailgate_face_bow": 0.0817
+      "tailgate_face_bow": 0.0817,
+      "cab_section_y": 0.3463,
+      "cab_hw_rail": 0.9274,
+      "cab_tumblehome": 0.3723,
+      "cab_tumblehome_curve": 0.0099,
+      "cab_shoulder_z": 0.47,
+      "cab_roof_edge_hw": 0.66,
+      "cab_roof_crown": 0.0101,
+      "cab_back_bow": 0.0135,
+      "cab_back_corner_r": 0.0837,
+      "cab_back_top_ry": 0.2567,
+      "cab_back_top_rz": 0.0779,
+      "cab_glass_bottom_z": -0.02,
+      "cab_glass_top_z": 0.445
     },
     "ats_f150_ingame": {
       "_comment": "UNVERIFIED: fill every value from the Road Trip F-150 model on the gaming PC (same frame and meaning as reference_glb), then set \"active\": \"ats_f150_ingame\". Renders on the reference model will then show the in-game footprint (not an exact fit on that model).",
@@ -74,7 +92,20 @@
       "bed_side_rear_y": null,
       "tailgate_top_z": null,
       "tailgate_face_y": null,
-      "tailgate_face_bow": null
+      "tailgate_face_bow": null,
+      "cab_section_y": null,
+      "cab_hw_rail": null,
+      "cab_tumblehome": null,
+      "cab_tumblehome_curve": null,
+      "cab_shoulder_z": null,
+      "cab_roof_edge_hw": null,
+      "cab_roof_crown": null,
+      "cab_back_bow": null,
+      "cab_back_corner_r": null,
+      "cab_back_top_ry": null,
+      "cab_back_top_rz": null,
+      "cab_glass_bottom_z": null,
+      "cab_glass_top_z": null
     }
   }
 }
